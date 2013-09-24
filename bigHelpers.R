@@ -157,20 +157,16 @@ print.large <- function(largeMat,row=3,col=2,digits=4,rL="Row#",rlab="rownames",
 
 #' Function to estimate the variance percentages for uncalculated eigenvalues
 #'
-#' If using a function like 'svd' or 'irlba' to calculate PCA, then you can choose (for speed) 
+#' If using a function like irlba' to calculate PCA, then you can choose (for speed) 
 #' to only calculate a subset of the eigenvalues. So there is no exact % of variance explained 
 #' the PCA, or by each component as you will get as output from other routines.
 #' This code uses a b*1/x model to estimate the AUC for the unknown eigenvalues, providing
 #' a reasonable estimate of the variances accounted for by each unknown eigenvalue, and
 #' the predicted eigenvalue sum of the unknown eigenvalues.
 #'
-#estimate.eig.vpcs <- function(eigenv=NULL,nsamp=1000,n.comp=length(eigenv),elbow=9,
-#                              print.est=T,print.coef=F,add.fit.line=F,col="blue")
 #' @param eigenv the vector of eigenvalues actually calculated
-#' @param nsamp the size of the smaller dimension of the matrix submitted to singular
+#' @param min.dim the size of the smaller dimension of the matrix submitted to singular
 #'  value decomposition, e.g, number of samples - i.e, the max number of possible eigenvalues
-#' @param n.comp by default the length of 'eigenv' but can enter a lower number to
-#'  estimate using only the first 'n.comp' eigenvalues
 #' @param elbow the number of components for which you want to estimate the variance
 #'   explained, e.g, often the number of components used is decided by the 'elbow' in
 #'   a scree plot (see 'pca.scree.plots')
@@ -182,54 +178,51 @@ print.large <- function(largeMat,row=3,col=2,digits=4,rL="Row#",rlab="rownames",
 #' @seealso pca.scree.plots
 #' @export
 #' @examples
-#' nsamp <- 200; nvar <- 500; subset.size <- 50
-#' mat <- matrix(rnorm(nsamp*nvar),ncol=nsamp) # mat <- t(crimtab)
-#' t.mat <- t(mat)
-#' MMs <- t.mat %*% mat
-#' MsM <- mat %*% t.mat
+#' nsamp <- 200; nvar <- 500; subset.size <- 50; elbow <- 6
+#' mat <- matrix(rnorm(min.dim*nvar),ncol=min.dim) # mat <- crimtab
 #' print.large(mat)
-#' pca <- svd(mat) #,nv=subset.size,nu=0)
-#' D <- pca$d
-#' sig <- mat-mat; sig <- t.mat-t.mat; diag(sig) <- D
-#' V <- pca$v
-#' U <- pca$u
-#' MMs2 <- V %*% (t(sig) %*% sig) %*% t(V)
-#' MsM2 <- U %*% (sig %*% t(sig)) %*% t(U)
-#' pr <- princomp(mat) # PCA using eigendecomposition of cov matrix
-#' L <- matrix(rep(0,40000),ncol=200); diag(L) <- pr[[1]]^2 # eigenvalues as diag
-#' mat2 <- (pr[[2]]) %*% L %*%  solve(pr[[2]]) # eigenvecs * eigenvals * inv(eigenvecs)
-#' print.large(cov(mat)); print.large(mat2) #  == COVmat
-#' median(abs(diag(cor(V,pr[["loadings"]])))); median(abs(diag(cor(U,pr[["scores"]]))))
-#' cor(pr$sdev,D)
-#' PCs <- pca$v[,1:subset.size]
+#' pca <- svd(mat,nv=subset.size,nu=0) # calculates subset of V, but all D
+#' pca2 <- irlba(mat,nv=subset.size,nu=0) # calculates subset of V & D
+#' pca3 <- princomp(mat) # calculates all
 #' Evalues <- pca$d^2 # number always relates to the smaller dimension of the matrix
-#' eig.varpc <- estimate.eig.vpcs(Evalues,nsamp)$variance.pcs
-#' sum(eig.varpc)
-#' textogram(cumsum(eig.varpc))
-#' eig.vars <- estimate.eig.vpcs(pca$d[1:50],nsamp,50)
+#' eig.varpc <- estimate.eig.vpcs(Evalues,M=mat)$variance.pcs
+#' cat("sum of all eigenvalue-variances=",sum(eig.varpc),"\n")
+#' print(eig.varpc[1:elbow])
+#' Evalues2 <- pca2$d^2
+#' eig.varpc <- estimate.eig.vpcs(Evalues2[1:10],M=mat)$variance.pcs
+#' print(eig.varpc[1:elbow])  ## why dramatically underestimating????
+#' eig.varpc <- estimate.eig.vpcs(pca3$sdev^2,M=mat)$variance.pcs
+#' print(eig.varpc[1:elbow])
 #' sum(sqrt(Evalues)[51:200])
-#' 
+#' pca.scree.plot(Evalues[1:10],n.comp=40,add.fit.line=T,min.dim=22)
 #' print.large(mat,row=9,col=4,digits=1,rL="#",rlab="samples",clab="variables")
-estimate.eig.vpcs <- function(eigenv=NULL,nsamp=1000,n.comp=length(eigenv),elbow=9,
+estimate.eig.vpcs <- function(eigenv=NULL,min.dim=length(eigenv),M=NULL,elbow=NA,
                               print.est=T,print.coef=F,add.fit.line=F,col="blue") {
+  if(all(is.na(elbow))) { elbow <- 3 } 
+  ## if matrix is optionally inputted, calculate the minimum dim automatically
+  if(!is.null(M)) { if(!is.null(dim(M))) { min.dim <- min(dim(M),na.rm=T) } }
+  n.comp <- length(eigenv) # max(c(min.dim,length(eigenv)),na.rm=T)
   elbow <- round(min(n.comp,elbow,na.rm=T)) # make sure not > n.comp
   if(!is.numeric(eigenv)) { warning("eigenv not numeric"); return(NULL) }
-  if(is.na(nsamp) | ((nsamp-length(eigenv))<2) | ((n.comp-elbow)<(5/nsamp)) ) {
+  if(is.na(min.dim) | ((min.dim-n.comp)<2) | ((n.comp-elbow)<(min.dim/20)) ) {
     # if most/all eigenvalues already present this is not needed, or if parameters insufficient
     # then don't try to calculate the AUC of the remaining eigenvalues
-    warning("didn't attempt to estimate eigenvalues as there were",
-        " too few unknowns compared to the number of samples,",
-        " or to the number before the elbow")
+    if(n.comp==min.dim) {
+      cat("All eigenvalues present, estimate not required\n")
+    } else {
+      warning("didn't attempt to estimate eigenvalues as there were",
+        " very few unknowns compared to the number of samples,",
+        " or not enough eigenvalues between the elbow and 'min.dim'")
+    }
     var.pcs <- eigenv[1:n.comp]/(sum(eigenv)); tail.var <- 0
   } else {
     # estimate combined variance of eigenvalues not calculated by irlba using 1/x model
     xx <- 1/(1:length(eigenv)) ; ab <- lm(eigenv[elbow:n.comp]~0+xx[elbow:n.comp])$coef
     # intercept ignored as the asymptote should theoretically be zero so assumption
     # values > this reflect noise variance that might dissipate as x--> n.samp
-    tail.var <- ((log(nsamp-elbow)-log(length(eigenv)-elbow))*ab[1]) # integral evaluated
-    print(tail.var)
+    tail.var <- ((log(min.dim-elbow)-log(length(eigenv)-elbow))*ab[1]) # integral evaluated
     if(print.est) {
-      not.calc <- nsamp-length(eigenv)
+      not.calc <- min.dim-length(eigenv)
       cat(" estimate of eigenvalue sum of",not.calc,"uncalculated eigenvalues:",(as.numeric(tail.var)),"\n")
     }
     if(print.coef) {
@@ -237,7 +230,7 @@ estimate.eig.vpcs <- function(eigenv=NULL,nsamp=1000,n.comp=length(eigenv),elbow
     }
     if(add.fit.line) {
       # add fitted line to scree plot if one exists
-      try(lines(c((elbow+1):n.comp),ab[1]*(1/c((elbow+1):n.comp)),col=col),T)
+      try(lines(c((elbow+1):min.dim),ab[1]*(1/c((elbow+1):min.dim)),col=col),T)
     }
     var.pcs <- eigenv[1:n.comp]/(sum(eigenv)+tail.var)
   }
@@ -675,6 +668,28 @@ get.PCA.subset <- function(dir,pc.to.keep=.13,assoc=F,autosomes=T,big.fn="combin
   print(subset.descr)
   return(subset.descr)
 }
+
+
+## Demonstrate PCA versus SVD ##
+#' min.dim <- 200; nvar <- 500; subset.size <- 50
+#' mat <- matrix(rnorm(min.dim*nvar),ncol=min.dim) # mat <- t(crimtab)
+#' t.mat <- t(mat)
+#' MMs <- t.mat %*% mat
+#' MsM <- mat %*% t.mat
+#' print.large(mat)
+#' pca <- svd(mat) #,nv=subset.size,nu=0)
+#' D <- pca$d
+#' sig <- mat-mat; sig <- t.mat-t.mat; diag(sig) <- D
+#' V <- pca$v
+#' U <- pca$u
+#' MMs2 <- V %*% (t(sig) %*% sig) %*% t(V)
+#' MsM2 <- U %*% (sig %*% t(sig)) %*% t(U)
+#' pr <- princomp(mat) # PCA using eigendecomposition of cov matrix
+#' L <- matrix(rep(0,40000),ncol=200); diag(L) <- pr[[1]]^2 # eigenvalues as diag
+#' mat2 <- (pr[[2]]) %*% L %*%  solve(pr[[2]]) # eigenvecs * eigenvals * inv(eigenvecs)
+#' print.large(cov(mat)); print.large(mat2) #  == COVmat
+#' median(abs(diag(cor(V,pr[["loadings"]])))); median(abs(diag(cor(U,pr[["scores"]]))))
+#' cor(pr$sdev,D)
 
 
 big.PCA <- function(subDescr,dir,pcs.to.keep=50,SVD=T,LAP=F,save.pcs=T,pcs.fn="PCsEVsFromPCA.RData") 
