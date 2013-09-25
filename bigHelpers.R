@@ -178,25 +178,25 @@ print.large <- function(largeMat,row=3,col=2,digits=4,rL="Row#",rlab="rownames",
 #' @seealso pca.scree.plots
 #' @export
 #' @examples
-#' nsamp <- 200; nvar <- 500; subset.size <- 50; elbow <- 6
-#' mat <- matrix(rnorm(min.dim*nvar),ncol=min.dim) # mat <- crimtab
+#' nsamp <- 200; nvar <- 500; subset.size <- 50; elbow <- 6; est.subs <- 50
+#' mat <- matrix(rnorm(nsamp*nvar),ncol=nsamp) # mat <- crimtab
 #' print.large(mat)
 #' pca <- svd(mat,nv=subset.size,nu=0) # calculates subset of V, but all D
 #' pca2 <- irlba(mat,nv=subset.size,nu=0) # calculates subset of V & D
 #' pca3 <- princomp(mat) # calculates all
-#' Evalues <- pca$d^2 # number always relates to the smaller dimension of the matrix
-#' eig.varpc <- estimate.eig.vpcs(Evalues,M=mat)$variance.pcs
+#' # number of eigenvalues for svd is the smaller dimension of the matrix
+#' eig.varpc <- estimate.eig.vpcs(pca$d^2,M=mat)$variance.pcs
 #' cat("sum of all eigenvalue-variances=",sum(eig.varpc),"\n")
 #' print(eig.varpc[1:elbow])
-#' Evalues2 <- pca2$d^2
-#' eig.varpc <- estimate.eig.vpcs(Evalues2[1:10],M=mat)$variance.pcs
+#' # number of eigenvalues for irlba is the size of the subset if < min(dim(M))
+#' eig.varpc <- estimate.eig.vpcs((pca2$d^2)[1:est.subs],M=mat)$variance.pcs
 #' print(eig.varpc[1:elbow])  ## why dramatically underestimating????
 #' eig.varpc <- estimate.eig.vpcs(pca3$sdev^2,M=mat)$variance.pcs
 #' print(eig.varpc[1:elbow])
-#' sum(sqrt(Evalues)[51:200])
-#' pca.scree.plot(Evalues[1:10],n.comp=40,add.fit.line=T,min.dim=22)
+#' sum(pca2$d[(1+length(pca2$d)):min(dim(mat))])
+#' pca.scree.plot((pca2$d^2)[1:est.subs],n.comp=40,add.fit.line=T,min.dim=min(dim(mat)))
 #' print.large(mat,row=9,col=4,digits=1,rL="#",rlab="samples",clab="variables")
-estimate.eig.vpcs <- function(eigenv=NULL,min.dim=length(eigenv),M=NULL,elbow=NA,
+estimate.eig.vpcs <- function(eigenv=NULL,min.dim=length(eigenv),M=NULL,elbow=NA,minus.x=F,
                               print.est=T,print.coef=F,add.fit.line=F,col="blue") {
   if(all(is.na(elbow))) { elbow <- 3 } 
   ## if matrix is optionally inputted, calculate the minimum dim automatically
@@ -204,6 +204,7 @@ estimate.eig.vpcs <- function(eigenv=NULL,min.dim=length(eigenv),M=NULL,elbow=NA
   n.comp <- length(eigenv) # max(c(min.dim,length(eigenv)),na.rm=T)
   elbow <- round(min(n.comp,elbow,na.rm=T)) # make sure not > n.comp
   if(!is.numeric(eigenv)) { warning("eigenv not numeric"); return(NULL) }
+  catdb(c("elbow","min.dim","n.comp","eigenv"))
   if(is.na(min.dim) | ((min.dim-n.comp)<2) | ((n.comp-elbow)<(min.dim/20)) ) {
     # if most/all eigenvalues already present this is not needed, or if parameters insufficient
     # then don't try to calculate the AUC of the remaining eigenvalues
@@ -217,20 +218,37 @@ estimate.eig.vpcs <- function(eigenv=NULL,min.dim=length(eigenv),M=NULL,elbow=NA
     var.pcs <- eigenv[1:n.comp]/(sum(eigenv)); tail.var <- 0
   } else {
     # estimate combined variance of eigenvalues not calculated by irlba using 1/x model
-    xx <- 1/(1:length(eigenv)) ; ab <- lm(eigenv[elbow:n.comp]~0+xx[elbow:n.comp])$coef
+    if(!minus.x) {
+      xx <- 1/(1:length(eigenv))
+      ab <- lm(eigenv[elbow:n.comp]~0+xx[elbow:n.comp])$coef
+      tail.var <- ((log(min.dim-elbow)-log(n.comp-elbow))*ab[1]) # integral evaluated
+      mod.txt <- "[b/x, no intercept]"
+      predy <- ab[1]*(1/c((elbow+1):min.dim))
+    } else {
+      xx <- 1:length(eigenv)
+      ab <- lm(eigenv[elbow:n.comp]~xx[elbow:n.comp])$coef
+      zeropoint <- round(ab[1]/abs(ab[2])); zeropoint <- min(c(min.dim,zeropoint),na.rm=T)
+      tail.var <- ((zeropoint+elbow)-n.comp)*(ab[1]+((n.comp-elbow)*ab[2]))*.5
+     # tail.var <- ((ab[1]*(zeropoint-n.comp))+((((n.comp-elbow)^2)-((zeropoint-elbow)^2))*ab[2]*.5)) # integral evaluated
+      mod.txt <- "[a + bx]"
+      predy <- ab[1]+(ab[2]*c((elbow+1):min.dim))
+      predy[(zeropoint-elbow):(min.dim-elbow)] <- 0
+    }
     # intercept ignored as the asymptote should theoretically be zero so assumption
     # values > this reflect noise variance that might dissipate as x--> n.samp
-    tail.var <- ((log(min.dim-elbow)-log(length(eigenv)-elbow))*ab[1]) # integral evaluated
-    if(print.est) {
+      if(print.est) {
       not.calc <- min.dim-length(eigenv)
       cat(" estimate of eigenvalue sum of",not.calc,"uncalculated eigenvalues:",(as.numeric(tail.var)),"\n")
     }
     if(print.coef) {
-      cat(" slope [1/x, no intercept]:",as.numeric(ab[1]),"\n")
+      cat(" slope",mod.txt,":",as.numeric(tail(ab,1)),"\n")
     }
     if(add.fit.line) {
       # add fitted line to scree plot if one exists
-      try(lines(c((elbow+1):min.dim),ab[1]*(1/c((elbow+1):min.dim)),col=col),T)
+      predx <- c((elbow+1):min.dim); print(predy)
+      #catdb(c("predx","predy"))
+      print(length(predx)); print(length(predy))
+      try(lines(predx,predy,col=col),T)
     }
     var.pcs <- eigenv[1:n.comp]/(sum(eigenv)+tail.var)
   }
@@ -240,21 +258,144 @@ estimate.eig.vpcs <- function(eigenv=NULL,min.dim=length(eigenv),M=NULL,elbow=NA
 }
 
 
-pca.scree.plot <- function(eigenv,elbow=9,n.comp=30,printvar=T,nsamp=NA,add.fit.line=F,...) 
+pca.scree.plot <- function(eigenv,elbow=NA,printvar=T,min.dim=NA,M=NULL,add.fit.line=F,n.xax=max(30,length(eigenv)),minus.x=F,...) 
 {
   # do SCREE PLOTS AND calculate EIGENVALUE VARIANCE after a PCA
-  plot(eigenv[1:n.comp],bty="l",xlab="number of principle components",ylab="eigenvalues",bg="green",pch=21,...)
+  if(!is.null(M)) { if(!is.null(dim(M))) { min.dim <- min(dim(M),na.rm=T) } }
+  if(all(is.na(elbow))) { elbow <- 3 }
+  n.comp <- length(eigenv)
+  elbow <- round(min(n.comp,elbow,na.rm=T))
+  plot(eigenv[1:n.xax],bty="l",xlab="number of principle components",ylab="eigenvalues",bg="green",pch=21,...)
   abline(v=(elbow+.5),lty="dashed")
   legend("topright",legend=c("Principle components","scree plot 'elbow' cutoff"),
          pt.bg=c("green",NA),pch=c(21,NA),lty=c(NA,"dashed"),bty="n")
-  scree.calc <- estimate.eig.vpcs(eigenv=eigenv,nsamp=nsamp,elbow=elbow,
-                  print.est=T,print.coef=T,add.fit.line=add.fit.line,col="blue")
+  scree.calc <- estimate.eig.vpcs(eigenv=eigenv,min.dim=min.dim,elbow=elbow,
+                  print.est=T,print.coef=T,add.fit.line=add.fit.line,col="blue",minus.x=minus.x)
   if(printvar) {
     cat(" sum of eigen-variance:",round(sum(eigenv)+scree.calc$tail.auc,2),"\n")
     cat(" variance % estimates: \n ",round(scree.calc$variance.pcs,2),"\n")
   }
   return(scree.calc$variance.pcs)
 }
+
+
+
+# catdb  # to put into NCmisc
+# @examples
+#' testvar1 <- 193
+#' testvar2 <- "Atol"
+#' testvar3 <- c(1:10)
+#' testvar4 <- matrix(rnorm(100),nrow=25)
+#' testvar5 <- list(tree="test",poo=testvar4,wee=100:110)
+#' catdb("testvar1")
+#' catdb("testvar4")
+#' catdb(paste("testvar",1:5,sep=""))
+#' catdb(testvar1,"myvarname")
+#' catdb(testvar1)
+#'
+#' for (cc in 1:4) {
+#'  for (dd in 1:4) { catdb("testvar4",counts=list(cc,dd)) }}
+#'
+#' for (dd in 1:3) { catdb("testvar5",counts=list(dd=dd)) }
+catdb <- function(varlist,labels=NULL,counts=NULL) {
+  ## for debugging, simplify code to print vars you are checking
+  lab <- varlist
+  # test whether 'counts' sublists are all of the same length as varlist, else ignore 'counts'
+  if(is.list(counts)) {  if(!all(sapply(counts,length)==length(varlist))) { 
+    counts <- NULL } } else { counts <- NULL }
+  #val <- vector("list",length(lab))
+  display.var <- function(val,label,cnts=NULL) {
+    if(is(cnts)[1]=="list") {
+      ## if vars to debug have a counter, update the value and label with count(s)
+      if(is(val)[1]=="list") { 
+        for (dd in 1:length(cnts)) {
+          val <- val[[ cnts[[dd]] ]] 
+          if(!is.null(names(cnts))) { 
+            label <- paste(label,"[[",names(cnts)[dd],"=",cnts[[dd]],"]]",sep="") 
+          } else {
+            label <- paste(label,"[[",cnts[[dd]],"]]",sep="")
+          }
+        }
+      } else {
+        #val <- val[cnts[[dd]] ]
+        if(length(dim(val))!=length(cnts)) {
+          val <- val ; warning("counts did not match dimensions")
+        } else {
+          arg.list <- vector("list",1+length(cnts)); arg.list[[1]] <- val
+          arg.list[2:(1+length(cnts))] <- cnts
+          val <- do.call("[",args=arg.list)
+          if(!is.null(names(cnts))) { 
+            label <- paste(label,"[",
+                           paste(paste(names(cnts),"=",cnts,sep=""),collapse=","),"]",sep="") 
+          } else {
+            label <- paste(label,"[",paste(cnts,collapse=","),"]",sep="")
+          }
+        }
+      }
+    }
+    ## display appropriately according to datatype ##
+    typ <- is(val)[1]
+    if(length(unlist(val))==1) {
+      cat(label,": ",val," (",typ,", ",Dim(val),")",sep=""); return(invisible())
+    } 
+    if(is(val)[1]=="list") {
+      cat(label," (",typ,", ",Dim(val),")\n",sep=""); print(headl(val)); return(invisible())
+    }
+    if(typ=="big.matrix") {
+      print.big.matrix(val,name=label); return(invisible())
+    } else {
+      if(!is.null(dim(val))) {
+        cat(label," (",typ,", ",Dim(val),")\n",sep="");
+        print.large(val)
+        return(invisible())
+      } else {
+        cat(label," (",typ,", ",Dim(val),") [head]:\n",sep="")
+        print(head(val))
+        return(invisible())
+      }
+    }
+  }
+  ## if data not entered as
+  if(!is.character(varlist) | !is.null(labels)) { 
+    if(is.null(labels) | (length(varlist)!=length(labels))) { 
+      display.var(varlist,"unknown variable")
+    } else { 
+      for(cc in 1:length(labels)){
+        if(is.list(counts)) { cnts <- lapply(counts,"[",cc) } else { cnts <- NULL }
+        display.var(varlist[cc],labels[cc],cnts=cnts)
+        cat("\n") 
+      }
+      return(invisible())
+    }
+    return(invisible())
+  } 
+  for(cc in 1:length(lab)) {
+    label <- lab[cc]
+    val <- get(lab[cc],envir=sys.frame(1))
+    if(is.list(counts)) { cnts <- lapply(counts,"[",cc) } else { cnts <- NULL }
+    display.var(val,label,cnts=cnts)
+    cat("\n") 
+  }
+  return(invisible())
+}
+
+
+## More general 'dim' function
+# will give length(x) for vectors
+# will look at dimensions of each elements for a list
+Dim <- function(x,cat.lists=T) {
+  rez <- NULL
+  try(rez <- dim(x))
+  if(!is.null(rez)) { return(dim(x)) }
+  if(is(x)[1]=="list") { 
+    out <- lapply(x,Dim) 
+    if(cat.lists) {
+      out <- paste(out,collapse="; ")
+    }
+  } else { out <- length(x) }
+  return(out)  
+}
+
 
 
 multi.fn.on.big.split <- function(bigMat,func,dir=NULL,bycol=T,by=200,n.cores=1,chunkwise=F,split.arg=NULL,...) {
