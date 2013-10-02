@@ -155,48 +155,54 @@ print.large <- function(largeMat,row=3,col=2,digits=4,rL="Row#",rlab="rownames",
 }
 
 
-#' Function to estimate the variance percentages for uncalculated eigenvalues
+#' Estimate the variance percentages for uncalculated eigenvalues
 #'
 #' If using a function like irlba' to calculate PCA, then you can choose (for speed) 
 #' to only calculate a subset of the eigenvalues. So there is no exact % of variance explained 
 #' the PCA, or by each component as you will get as output from other routines.
-#' This code uses a b*1/x model to estimate the AUC for the unknown eigenvalues, providing
+#' This code uses a linear or b*1/x model to estimate the AUC for the unknown eigenvalues, providing
 #' a reasonable estimate of the variances accounted for by each unknown eigenvalue, and
 #' the predicted eigenvalue sum of the unknown eigenvalues.
 #'
 #' @param eigenv the vector of eigenvalues actually calculated
 #' @param min.dim the size of the smaller dimension of the matrix submitted to singular
-#'  value decomposition, e.g, number of samples - i.e, the max number of possible eigenvalues
-#' @param elbow the number of components for which you want to estimate the variance
-#'   explained, e.g, often the number of components used is decided by the 'elbow' in
-#'   a scree plot (see 'pca.scree.plots')
+#'  value decomposition, e.g, number of samples - i.e, the max number of possible eigenvalues,
+#'  alternatively use 'M'.
+#' @param M optional enter the original dataset 'M'; simply used to derive the dimensions,
+#'  alternatively use 'min.dim'.
+#' @param elbow the number of components which you think explain the important chunk
+#'  of the variance of the dataset, so further components are modelled as reflecting
+#'  noise or very subtle effects, e.g, often the number of components used is decided
+#'  by the 'elbow' in  a scree plot (see 'pca.scree.plots')
+#' @param linear whether to use a linear model to model the 'noise' eigenvalues; alternative
+#'  is a 1/x model with no intercept.
 #' @param print.est whether to output the estimate result to the console
-#' @param whether to output the estimate regression coefficients to the console
-#' @param if you have an existing scree plot, add the fit line from this estimate
-#'  to the plot (see 'pca.scree.plots')
+#' @param print.coef whether to output the estimate regression coefficients to the console
+#' @param add.fit.line logical, if there is an existing scree plot, adds the fit line from this estimate
+#'  to the plot ('pca.scree.plots' can use this option using the parameter of the same name)
 #' @param col colour for the fit line
 #' @seealso pca.scree.plots
 #' @export
 #' @examples
-#' nsamp <- 200; nvar <- 500; subset.size <- 50; elbow <- 6; est.subs <- 50
-#' mat <- matrix(rnorm(nsamp*nvar),ncol=nsamp) # mat <- crimtab
+#' nsamp <- 200; nvar <- 500; subset.size <- 50; elbow <- 6
+#' mat <- matrix(rnorm(nsamp*nvar),ncol=nsamp) 
+#' # or use: # mat <- crimtab-rowMeans(crimtab) ; subset.size <- 10 # crimtab centred
 #' print.large(mat)
 #' pca <- svd(mat,nv=subset.size,nu=0) # calculates subset of V, but all D
 #' pca2 <- irlba(mat,nv=subset.size,nu=0) # calculates subset of V & D
-#' pca3 <- princomp(mat) # calculates all
+#' pca3 <- princomp(mat,cor=T) # calculates all
 #' # number of eigenvalues for svd is the smaller dimension of the matrix
 #' eig.varpc <- estimate.eig.vpcs(pca$d^2,M=mat)$variance.pcs
 #' cat("sum of all eigenvalue-variances=",sum(eig.varpc),"\n")
 #' print(eig.varpc[1:elbow])
 #' # number of eigenvalues for irlba is the size of the subset if < min(dim(M))
-#' eig.varpc <- estimate.eig.vpcs((pca2$d^2)[1:est.subs],M=mat)$variance.pcs
-#' print(eig.varpc[1:elbow])  ## why dramatically underestimating????
-#' eig.varpc <- estimate.eig.vpcs(pca3$sdev^2,M=mat)$variance.pcs
-#' print(eig.varpc[1:elbow])
-#' sum(pca2$d[(1+length(pca2$d)):min(dim(mat))])
-#' pca.scree.plot((pca2$d^2)[1:est.subs],n.comp=40,add.fit.line=T,min.dim=min(dim(mat)))
-#' print.large(mat,row=9,col=4,digits=1,rL="#",rlab="samples",clab="variables")
-estimate.eig.vpcs <- function(eigenv=NULL,min.dim=length(eigenv),M=NULL,elbow=NA,minus.x=F,
+#' eig.varpc <- estimate.eig.vpcs((pca2$d^2)[1:subset.size],M=mat)$variance.pcs
+#' print(eig.varpc[1:elbow])  ## using 1/x model, underestimates total variance
+#' eig.varpc <- estimate.eig.vpcs((pca2$d^2)[1:subset.size],M=mat,linear=T)$variance.pcs
+#' print(eig.varpc[1:elbow])  ## using linear model, closer to exact answer
+#' eig.varpc <- estimate.eig.vpcs((pca3$sdev^2),M=mat)$variance.pcs
+#' print(eig.varpc[1:elbow])  ## different analysis, but fairly similar var.pcs
+estimate.eig.vpcs <- function(eigenv=NULL,min.dim=length(eigenv),M=NULL,elbow=NA,linear=T,
                               print.est=T,print.coef=F,add.fit.line=F,col="blue") {
   if(all(is.na(elbow))) { elbow <- 3 } 
   ## if matrix is optionally inputted, calculate the minimum dim automatically
@@ -204,7 +210,7 @@ estimate.eig.vpcs <- function(eigenv=NULL,min.dim=length(eigenv),M=NULL,elbow=NA
   n.comp <- length(eigenv) # max(c(min.dim,length(eigenv)),na.rm=T)
   elbow <- round(min(n.comp,elbow,na.rm=T)) # make sure not > n.comp
   if(!is.numeric(eigenv)) { warning("eigenv not numeric"); return(NULL) }
-  catdb(c("elbow","min.dim","n.comp","eigenv"))
+  #catdb(c("elbow","min.dim","n.comp","eigenv"))
   if(is.na(min.dim) | ((min.dim-n.comp)<2) | ((n.comp-elbow)<(min.dim/20)) ) {
     # if most/all eigenvalues already present this is not needed, or if parameters insufficient
     # then don't try to calculate the AUC of the remaining eigenvalues
@@ -218,17 +224,17 @@ estimate.eig.vpcs <- function(eigenv=NULL,min.dim=length(eigenv),M=NULL,elbow=NA
     var.pcs <- eigenv[1:n.comp]/(sum(eigenv)); tail.var <- 0
   } else {
     # estimate combined variance of eigenvalues not calculated by irlba using 1/x model
-    if(!minus.x) {
+    if(!linear) {
       xx <- 1/(1:length(eigenv))
       ab <- lm(eigenv[elbow:n.comp]~0+xx[elbow:n.comp])$coef
-      tail.var <- ((log(min.dim-elbow)-log(n.comp-elbow))*ab[1]) # integral evaluated
+      tail.var <- ((log(min.dim)-log(n.comp))*ab[1]) # integral evaluated
       mod.txt <- "[b/x, no intercept]"
       predy <- ab[1]*(1/c((elbow+1):min.dim))
     } else {
       xx <- 1:length(eigenv)
       ab <- lm(eigenv[elbow:n.comp]~xx[elbow:n.comp])$coef
       zeropoint <- round(ab[1]/abs(ab[2])); zeropoint <- min(c(min.dim,zeropoint),na.rm=T)
-      tail.var <- ((zeropoint+elbow)-n.comp)*(ab[1]+((n.comp-elbow)*ab[2]))*.5
+      tail.var <- (zeropoint-n.comp)*(ab[1]+((n.comp)*ab[2]))*.5
      # tail.var <- ((ab[1]*(zeropoint-n.comp))+((((n.comp-elbow)^2)-((zeropoint-elbow)^2))*ab[2]*.5)) # integral evaluated
       mod.txt <- "[a + bx]"
       predy <- ab[1]+(ab[2]*c((elbow+1):min.dim))
@@ -258,19 +264,67 @@ estimate.eig.vpcs <- function(eigenv=NULL,min.dim=length(eigenv),M=NULL,elbow=NA
 }
 
 
-pca.scree.plot <- function(eigenv,elbow=NA,printvar=T,min.dim=NA,M=NULL,add.fit.line=F,n.xax=max(30,length(eigenv)),minus.x=F,...) 
+#' Make scree plots for any PCA
+#'
+#' Make a scree plot using eigenvalues from princomp, prcomp, svd, irlba, big.pca, etc.
+#' Furthermore, if using a function like irlba' to calculate PCA, then you can choose (for speed) 
+#' to only calculate a subset of the eigenvalues. So there is no exact % of variance explained 
+#' the PCA, or by each component as you will get as output from other routines.
+#' This code uses a linear or b*1/x model to estimate the AUC for the unknown eigenvalues, providing
+#' a reasonable estimate of the variances accounted for by each unknown eigenvalue, using
+#' the predicted eigenvalue sum of the unknown eigenvalues. This can be visualised
+#' by adding the fitline of the estimate to the scree plot.
+#'
+#' @param eigenv the vector of eigenvalues actually calculated
+#' @param elbow the number of components which you think explain the important chunk
+#'  of the variance of the dataset, so further components are modelled as reflecting
+#'  noise or very subtle effects, e.g, often the number of components used is decided
+#'  by the 'elbow' in  a scree plot (see 'pca.scree.plots')
+#' @param min.dim the size of the smaller dimension of the matrix submitted to singular
+#'  value decomposition, e.g, number of samples - i.e, the max number of possible eigenvalues,
+#'  alternatively use 'M'.
+#' @param M optional enter the original dataset 'M'; simply used to derive the dimensions,
+#'  alternatively use 'min.dim'.
+#' @param linear whether to use a linear model to model the 'noise' eigenvalues; alternative
+#'  is a 1/x model with no intercept.
+#' @param printvar logical, whether to print summary of variance calculations
+#' @param add.fit.line logical, if there is an existing scree plot, adds the fit line from this estimate
+#'  to the plot ('pca.scree.plots' can use this option using the parameter of the same name)
+#' @param n.xax number of components to include on the x-axis
+#' @param ... further arguments to the plot function
+#' @seealso pca.scree.plots
+#' @export
+# @examples
+#' nsamp <- 200; nvar <- 500; elbow <- 6; subset.size <- 50
+# this gives the full solution
+#'pca <- svd(mat,nv=subset.size,nu=0)
+# test with larger and smaller subset, larger gives 1/x better fit, smaller, x
+#'pca2 <- irlba(mat,nv=subset.size,nu=0)
+# show alternate fits for linear versus 1/x fit
+#'pca.scree.plot((pca2$d^2)[1:subset.size],n.xax=200,add.fit.line=T,
+#'               min.dim=min(dim(mat)),linear=T, elbow=6, ylim=c(0,1400))
+#'pca.scree.plot((pca2$d^2)[1:subset.size],n.xax=200,add.fit.line=T,
+#'               min.dim=min(dim(mat)),linear=F, elbow=6, ylim=c(0,1400))
+#'subset.size <- 150
+#'pca2 <- irlba(mat,nv=subset.size,nu=0)
+#'pca.scree.plot((pca2$d^2)[1:subset.size],n.xax=200,add.fit.line=T,
+#'               min.dim=min(dim(mat)),linear=T, elbow=6, ylim=c(0,1400))
+#'pca.scree.plot((pca2$d^2)[1:subset.size],n.xax=200,add.fit.line=T,
+#'               min.dim=min(dim(mat)),linear=F, elbow=6, ylim=c(0,1400))
+pca.scree.plot <- function(eigenv,elbow=NA,printvar=T,min.dim=NA,M=NULL,add.fit.line=F,n.xax=max(30,length(eigenv)),linear=T,...) 
 {
   # do SCREE PLOTS AND calculate EIGENVALUE VARIANCE after a PCA
   if(!is.null(M)) { if(!is.null(dim(M))) { min.dim <- min(dim(M),na.rm=T) } }
   if(all(is.na(elbow))) { elbow <- 3 }
   n.comp <- length(eigenv)
   elbow <- round(min(n.comp,elbow,na.rm=T))
-  plot(eigenv[1:n.xax],bty="l",xlab="number of principle components",ylab="eigenvalues",bg="green",pch=21,...)
+  plot(eigenv[1:n.xax],bty="l",xlab="number of principle components",
+       ylab="eigenvalues",bg="green",pch=21,...)
   abline(v=(elbow+.5),lty="dashed")
   legend("topright",legend=c("Principle components","scree plot 'elbow' cutoff"),
          pt.bg=c("green",NA),pch=c(21,NA),lty=c(NA,"dashed"),bty="n")
   scree.calc <- estimate.eig.vpcs(eigenv=eigenv,min.dim=min.dim,elbow=elbow,
-                  print.est=T,print.coef=T,add.fit.line=add.fit.line,col="blue",minus.x=minus.x)
+                  print.est=T,print.coef=T,add.fit.line=add.fit.line,col="blue",linear=linear)
   if(printvar) {
     cat(" sum of eigen-variance:",round(sum(eigenv)+scree.calc$tail.auc,2),"\n")
     cat(" variance % estimates: \n ",round(scree.calc$variance.pcs,2),"\n")
@@ -280,19 +334,36 @@ pca.scree.plot <- function(eigenv,elbow=NA,printvar=T,min.dim=NA,M=NULL,add.fit.
 
 
 
-# catdb  # to put into NCmisc
+#' Output variable states within functions during testing/debugging
+#'
+#' # to put into NCmisc
+#' By listing variables to track as character(), provides 'cat()' output 
+#' of compact and informative variable state information, e.g, variable name, value,
+#' datatype and dimension. Can also specify array or list elements, or custom labels.
+#' @param varlist character vector, the list of variable(s) to report, which will trigger
+#'  automatic labelling of the variable name, otherwise if entered as the variable value (ie.
+#'  without quotes, then will by default be displayed as 'unknown variable')
+#' @param labels, will label 'unknown variables' (see above) if entered as variables without quotes
+#' @param counts a list of array index values; so if calling during a counting loop, the
+#'  value can be reported each iteration, also printing the count index; if the list is
+#'  named the name will also appear, e.g, variable[count=1]. This list must be the same
+#'  length as varlist (and labels if not NULL), and each element [[i]] must contain as many values
+#'  as the original corresponding varlist[i] has dimensions
+#' @seealso Dim
+# @export
 # @examples
+#' # create variables of different types to show output styles #
 #' testvar1 <- 193
 #' testvar2 <- "Atol"
 #' testvar3 <- c(1:10)
 #' testvar4 <- matrix(rnorm(100),nrow=25)
-#' testvar5 <- list(tree="test",poo=testvar4,wee=100:110)
+#' testvar5 <- list(first="test",second=testvar4,third=100:110)
 #' catdb("testvar1")
 #' catdb("testvar4")
 #' catdb(paste("testvar",1:5,sep=""))
 #' catdb(testvar1,"myvarname")
 #' catdb(testvar1)
-#'
+#' # examples with loops and multiple dimensions / lists
 #' for (cc in 1:4) {
 #'  for (dd in 1:4) { catdb("testvar4",counts=list(cc,dd)) }}
 #'
@@ -369,9 +440,13 @@ catdb <- function(varlist,labels=NULL,counts=NULL) {
     }
     return(invisible())
   } 
+  ENVIR <- parent.frame()
   for(cc in 1:length(lab)) {
     label <- lab[cc]
-    val <- get(lab[cc],envir=sys.frame(1))
+    #print(sys.parent())
+    #print(sys.nframe())
+    #print(sys.frame(-1))
+    val <- get(lab[cc],envir=ENVIR)
     if(is.list(counts)) { cnts <- lapply(counts,"[",cc) } else { cnts <- NULL }
     display.var(val,label,cnts=cnts)
     cat("\n") 
@@ -380,9 +455,24 @@ catdb <- function(varlist,labels=NULL,counts=NULL) {
 }
 
 
-## More general 'dim' function
-# will give length(x) for vectors
-# will look at dimensions of each elements for a list
+#' A more general 'dim()' function
+#'
+#' # to put into NCmisc
+#' A more general 'dim' function. For arrays simply calls the dim() function, but for other data types, tries to
+#' provide an equivalent, for instance will call length(x) for vectors, and will
+#' recursively report dims for lists, and will attempt something sensible for other datatypes.
+#' @param x the object to find the dimension for
+#' @param cat.lists logical, for lists, TRUE will concatenate the dimesions to a single string,
+#'  or FALSE will return the sizes as a list of the same structure as the original.
+#' @seealso catdb
+#' @export
+#' @examples
+#' # create variables of different types to show output styles #
+#' Dim(193)
+#' Dim(1:10)
+#' Dim(matrix(rnorm(100),nrow=25))
+#' Dim(list(first="test",second=testvar4,third=100:110))
+#' Dim(list(first="test",second=testvar4,third=100:110),F)
 Dim <- function(x,cat.lists=T) {
   rez <- NULL
   try(rez <- dim(x))
@@ -397,84 +487,166 @@ Dim <- function(x,cat.lists=T) {
 }
 
 
+# replaced by bmcapply
+# multi.fn.on.big.split <- function(bigMat,func,dir=NULL,bycol=T,by=200,n.cores=1,chunkwise=F,split.arg=NULL,...) {
+#   # multicore way of calculating a function (e.g, dlrs) for a big.matrix,
+#   # when chunkwise=F, a function that could be done with apply(); when chunkwise=T, one that
+#   # is best done in chunks rather than row by row or col by col
+#   # can do it column wise (bycol=T, eg for all samples), or row-wise, eg for all snps
+#   # 'by' is number of rows/cols to process in each chunk
+#   must.use.package("multicore")
+#   if(bycol) { tot.main <- ncol(bigMat); d2 <- nrow(bigMat) } else { tot.main <- nrow(bigMat); d2 <- ncol(bigMat) }
+#   if(!is.null(split.arg)) { 
+#     if(!is.null(dim(split.arg))) {
+#       if(bycol) { 
+#         if(ncol(split.arg)!=tot.main) { 
+#           split.arg <- NULL ; warning("split.arg should have same number of columns as bigMat")
+#       } } else {
+#         if(nrow(split.arg)!=tot.main) { 
+#           split.arg <- NULL ; warning("split.arg should have same number of rows as bigMat")
+#       } }
+#     } else {
+#       if(is.vector(split.arg) & length(split.arg)!=tot.main) { 
+#         split.arg <- NULL; warning("split arg needs to be the same length as the key bigMat dimension (",tot.main,")") 
+#     } }
+#   }
+#   if(!is.null(split.arg)) { 
+#     n.args.func <- length(formals(func))
+#     if(n.args.func<2) { split.arg <- NULL ; warning("split arg ignored as function only has 1 parameter") }
+#     if(n.args.func>2) { warning("split.arg must refer to the second argument of 'func' or results may be unpredictable") }
+#   }
+#   stepz <- round(seq(from=1,to=(tot.main+1),by=by))
+#   if((tail(stepz,1)) != tot.main+1) { stepz <- c(stepz,tot.main+1) }
+#   split.to <- length(stepz)-1
+#   result <- numeric(tot.main)
+#   ## define the function
+#   big.fnc <- function(dd,func,stepz,bigMat,dir,bycol=T,split.arg=NULL,...)
+#   {
+#     big.type <- is.big.matrix(bigMat)
+#     x1 <- stepz[dd]; x2 <- stepz[dd+1]-1 #subset row selection
+#     if(bycol) {
+#       if(big.type) {
+#         next.block <- sub.big.matrix(bigMat, firstCol=x1, lastCol=x2, backingpath=dir )
+#       } else {
+#         next.block <- bigMat[,x1:x2]
+#       }
+#       dm <- 2
+#     } else {
+#       if(big.type) {
+#         next.block <- sub.big.matrix(bigMat, firstRow=x1, lastRow=x2, backingpath=dir )
+#       } else {
+#         next.block <- bigMat[x1:x2,]
+#       }
+#       dm <- 1
+#     }
+#     if(!is.null(split.arg)) {
+#       if(is.null(dim(split.arg))) { split.arg <- split.arg[x1:x2] } else {
+#         if(bycol) { split.arg <- split.arg[,x1:x2] } else { split.arg <- split.arg[x1:x2,] }
+#       }
+#       print(length(split.arg))
+#       # if a valid split.arg, then enter it as the second parameter of the function
+#       if(chunkwise) { out <- func(next.block,split.arg,...)  } else {  out <- apply(next.block,dm,func,split.arg,...) }
+#     } else {
+#       if(chunkwise) { out <- func(next.block,...)  } else {  out <- apply(next.block,dm,func,...) }
+#     }
+#     rm(next.block) ; gc() # remove the sub-matrix pointer each iteration  
+#     return(out)
+#   }
+#   ## run function as mclapply()
+#   if(split.to>=1) {
+#     result.list <- multicore::mclapply(1:split.to, big.fnc, func=func, stepz=stepz, 
+#                                        bigMat=bigMat, dir=dir, bycol=bycol, mc.cores=n.cores,split.arg=split.arg,...)
+#     if(!chunkwise) { result <- unlist(result.list) } # if apply-type, then recombine result, else leave as list
+#   } else {
+#     result <- NULL; warning("matrix had insufficient columns returning NULL")
+#   }
+#   return(result)  
+# }
 
-multi.fn.on.big.split <- function(bigMat,func,dir=NULL,bycol=T,by=200,n.cores=1,chunkwise=F,split.arg=NULL,...) {
-  # multicore way of calculating a function (e.g, dlrs) for a big.matrix,
-  # when chunkwise=F, a function that could be done with apply(); when chunkwise=T, one that
-  # is best done in chunks rather than row by row or col by col
-  # can do it column wise (bycol=T, eg for all samples), or row-wise, eg for all snps
-  # 'by' is number of rows/cols to process in each chunk
-  must.use.package("multicore")
-  if(bycol) { tot.main <- ncol(bigMat); d2 <- nrow(bigMat) } else { tot.main <- nrow(bigMat); d2 <- ncol(bigMat) }
-  if(!is.null(split.arg)) { 
-    if(!is.null(dim(split.arg))) {
-      if(bycol) { 
-        if(ncol(split.arg)!=tot.main) { 
-          split.arg <- NULL ; warning("split.arg should have same number of columns as bigMat")
-      } } else {
-        if(nrow(split.arg)!=tot.main) { 
-          split.arg <- NULL ; warning("split.arg should have same number of rows as bigMat")
-      } }
-    } else {
-      if(is.vector(split.arg) & length(split.arg)!=tot.main) { 
-        split.arg <- NULL; warning("split arg needs to be the same length as the key bigMat dimension (",tot.main,")") 
-    } }
-  }
-  if(!is.null(split.arg)) { 
-    n.args.func <- length(formals(func))
-    if(n.args.func<2) { split.arg <- NULL ; warning("split arg ignored as function only has 1 parameter") }
-    if(n.args.func>2) { warning("split.arg must refer to the second argument of 'func' or results may be unpredictable") }
-  }
-  stepz <- round(seq(from=1,to=(tot.main+1),by=by))
-  if((tail(stepz,1)) != tot.main+1) { stepz <- c(stepz,tot.main+1) }
-  split.to <- length(stepz)-1
-  result <- numeric(tot.main)
-  ## define the function
-  big.fnc <- function(dd,func,stepz,bigMat,dir,bycol=T,split.arg=NULL,...)
-  {
-    big.type <- is.big.matrix(bigMat)
-    x1 <- stepz[dd]; x2 <- stepz[dd+1]-1 #subset row selection
-    if(bycol) {
-      if(big.type) {
-        next.block <- sub.big.matrix(bigMat, firstCol=x1, lastCol=x2, backingpath=dir )
-      } else {
-        next.block <- bigMat[,x1:x2]
-      }
-      dm <- 2
-    } else {
-      if(big.type) {
-        next.block <- sub.big.matrix(bigMat, firstRow=x1, lastRow=x2, backingpath=dir )
-      } else {
-        next.block <- bigMat[x1:x2,]
-      }
-      dm <- 1
-    }
-    if(!is.null(split.arg)) {
-      if(is.null(dim(split.arg))) { split.arg <- split.arg[x1:x2] } else {
-        if(bycol) { split.arg <- split.arg[,x1:x2] } else { split.arg <- split.arg[x1:x2,] }
-      }
-      print(length(split.arg))
-      # if a valid split.arg, then enter it as the second parameter of the function
-      if(chunkwise) { out <- func(next.block,split.arg,...)  } else {  out <- apply(next.block,dm,func,split.arg,...) }
-    } else {
-      if(chunkwise) { out <- func(next.block,...)  } else {  out <- apply(next.block,dm,func,...) }
-    }
-    rm(next.block) ; gc() # remove the sub-matrix pointer each iteration  
-    return(out)
-  }
-  ## run function as mclapply()
-  if(split.to>=1) {
-    result.list <- multicore::mclapply(1:split.to, big.fnc, func=func, stepz=stepz, 
-                                       bigMat=bigMat, dir=dir, bycol=bycol, mc.cores=n.cores,split.arg=split.arg,...)
-    if(!chunkwise) { result <- unlist(result.list) } # if apply-type, then recombine result, else leave as list
-  } else {
-    result <- NULL; warning("matrix had insufficient columns returning NULL")
-  }
-  return(result)  
-}
 
 
-bigmcapply <- function(bigMat,MARGIN,FUN,dir=NULL,by=200,n.cores=1,use.apply=T,combine.fn=NULL,...) {
+
+#' A multicore 'apply' function for big.matrix objects
+#'
+#' # to put into NCmisc
+#' Multicore method to run a function for a big.matrix that could be run using 'apply'
+#' on a regular matrix (when parameter use.apply=T [default]). Otherwise for a
+#' function that might be more efficient done in done in chunks (e.g, utilising vectorised 
+#'  functions) use.apply=F can be set so that processing is done on larger submatrices, rather
+#' than 1 row/column at a time. Input to specify whether to perform the function
+#' row or columnwise is equivalent to 'apply' syntax, 1=by-rows, 2=by-columns.
+#' This function is useful for big.matrix processing even without multiple cores, particulary
+#' when MARGIN=1 (row-wise). While native colmean, colmin and colsd functions for 
+#' big.matrix objects are very fast (and will probably outperform bmcapply even with 1
+#'  core versus many), these are only natively implemented for column-wise operations and 
+#' the equivalent operations if needing to be row-wise should be faster with bmcapply for
+#' matrices larger than available RAM.
+#' Can also be used for regular matrices although there is unlikely to be a speed advantage.
+#' @seealso getBigMat
+#' @param bigMat the big.matrix object to apply the function upon, can enter as a filename,
+#'  description object or any other valid parameter to getBigMat(). Can also use with a standard matrix
+#' @param MARGIN 1=row-wise, 2=column-wise, see same argument for base:::apply()
+#' @param FUN the function to apply, should return a result with 1 dimension that has the
+#'  same length as dim(bigMat)[MARGIN]=L; i.e, a vector length L, matrix (L,x) or (x,L) or list[[L]].
+#'  Note that using a custom 'combine.fn' parameter might allow exceptions to this.
+#' @param dir directory argument for getBigMat(), ie. the location of the bigMat backing file if 
+#'  not in the current working directory.
+#' @param by integer, the number of rows/columns to process at once. The default should work in most
+#'  situations however, if the dimension not specified by MARGIN is very large, this might need
+#'  to be smaller, or if the function being applied is much more efficient performed 
+#'  on a large matrix than several smaller ones then this 'by' parameter should be increased
+#'  within memory contraints. You should make sure 'estimate.memory(c(by,dim(bigMat)[-MARGIN]))'
+#'  doesn't exceed available RAM.
+#' @param n.cores integer, the number of parallel cores to utilise; note that sometimes if a machine
+#'  has only a few cores this can result in slower performance by tying up resources
+#'  which should be available to perform background and system operations.
+#' @param use.apply logical, if TRUE then use the 'apply' function to apply FUN to
+#'  each submatrix, or if FALSE, then directly apply FUN to submatrices, which
+#'  means that FUN must return results with at least 1 dimension the same as the input, 
+#'  or you can use a custom 'combine.fn' parameter to recombine results from submatrices.
+#' @param convert only need to change this parameter when use.apply=FALSE. If use are using a 
+#'  function that can natively run on big.matrix objectsthen you can increase speed 
+#'  by setting convert=FALSE. Most functions will expect a regular matrix
+#'   and may fail with a big.matrix, so default convert=TRUE behaviour
+#'  will convert submatrices to a regular matrix just before processing.
+#' @param combine.fn a custom function to recombine input from sub.matrix processing. Default
+#'  combine functions are list(), cbind() and rbind(); so a custom function should
+#'  expect the same input as these; ie., a list of unspecified length, which will be
+#'  the list of results from parallel calls on submatrices of bigMat, usually of size by*X.
+#' @param ... if use.apply=TRUE, then additional arguments for apply(); else additional arguments
+#'  for FUN.
+#' @export
+#' @examples
+#' library(bigmemory); library(biganalytics)
+#' # set up a toy example of a big.matrix (functions most relevant when matrix is huge)
+#' bM <- filebacked.big.matrix(20, 50,
+#'        dimnames = list(paste("r",1:20,sep=""), paste("c",1:50,sep="")),
+#'        backingfile = "test.bck",  backingpath = getwd(), descriptorfile = "test.dsc")
+#' bM[1:20,] <- replicate(50,rnorm(20))
+#' print.big.matrix(bM)
+#' # compare native bigmemory column-wise function to multicore [native probably faster]
+#' v1 <- colsd(bM) # native bigmemory function
+#' v2 <- bmcapply(bM,2,sd,n.cores=10) # use up to 10 cores if available
+#' print(all.equal(v1,v2))
+#' # compare row-means approaches
+#' v1 <- rowMeans(as.matrix(bM))
+#' v2 <- bmcapply(bM,1,mean,n.cores=10)
+#' v3 <- bmcapply(bM,1,rowMeans,use.apply=F)
+#' print(all.equal(v1,v2)); print(all.equal(v2,v3))
+#' # example using a custom combine function; taking the mean of column means
+#' weight.means.to.scalar <- function(...) { X <- list(...); mean(unlist(X)) }
+#' v1 <- bmcapply(bM, 2, sd, combine.fn=weight.means.to.scalar)
+#' v2 <- mean(colsd(bM))
+#' print(all.equal(v1,v2))
+#' ## note that this function works with normal matrices, however, multicore
+#' # operation is only likely to benefit speed when operations take more than 10 seconds
+#' # so this function will mainly help using large matrices or intensive functions
+#' test.size <- 5 # try increasing this number, or use more intensive function than sd()
+#' to test relative speed for larger matrices
+#' M <- matrix(runif(10^test.size),ncol=10^(test.size-2)) # normal matrix
+#' system.time(bmcapply(M,2,sd,n.cores=10)) # use up to 10 cores if available
+#' system.time(apply(M,2,sd)) # 
+bmcapply <- function(bigMat,MARGIN,FUN,dir=NULL,by=200,n.cores=1,use.apply=T,convert=!use.apply,combine.fn=NULL,...) {
   # multicore way of calculating a function (e.g, dlrs) for a big.matrix,
   # when use.apply=T, a function that could be done with apply(); when use.apply=F, one that
   # is best done in chunks rather than row by row or col by col
@@ -513,6 +685,7 @@ bigmcapply <- function(bigMat,MARGIN,FUN,dir=NULL,by=200,n.cores=1,use.apply=T,c
       }
       dm <- 1
     }
+    if(convert | is.null(dim(next.block))) { next.block <- as.matrix(next.block) } # conv to standard matrix if req'd
     if(!use.apply) { out <- func(next.block,...)  } else {  out <- apply(next.block,dm,func,...) }
     rm(next.block) ; gc() # remove the sub-matrix pointer each iteration  
     return(out)
@@ -535,6 +708,7 @@ bigmcapply <- function(bigMat,MARGIN,FUN,dir=NULL,by=200,n.cores=1,use.apply=T,c
 }
 
 
+## internal function
 choose.comb.fn <- function(result.list,stepz) {
   ### NB: when usefulBox is a package this should require(usefulBox)
   # choose the best function to combine multicore results from bigmcapply
@@ -588,6 +762,23 @@ choose.comb.fn <- function(result.list,stepz) {
 }
 
 
+#' Attempt to install the bigalgebra package using SVN
+#'
+#' The bigalgebra package for efficient algebraic operations on big.matrix objects
+#' is not currently on CRAN, and fails a check on dependencies. Changing the 
+#' description file to add the dependency, and linking 'BH' allows the package to work.
+#' This function attempts to check-out the latest version of bigalgebra from SVN
+#' version management system and corrects the description file then installs.
+#' Note you must also have 'BLAS' installed on your system to utilise this package
+#' effectively. PCA functions in the present package are better with bigalgebra installed,
+#' but will still run without it. For more information on installation alternatives, 
+#' type big.algebra.install.help().
+#' Returns TRUE if bigalgebra is already installed.
+#' @seealso big.algebra.install.help
+#' @param verbose whether to report on installation progress/steps
+#' @export
+#' @examples
+#' # not run # svn.bigalgebra.install(TRUE)
 svn.bigalgebra.install <- function(verbose=F) {
   # this is a major hack to install bigalgebra from SVN,
   # manually modifying the DESCRIPTION file to depend and link to 'BH'
@@ -640,14 +831,33 @@ svn.bigalgebra.install <- function(verbose=F) {
 }
 
 
-
+#' Attempt to install the bigalgebra package
+#'
+#' Will attempt to see whether bigalgebra is installed, then check CRAN in case it
+#' has been updated, then check RForge. Failing that, it will attempt to install
+#' using svn.bigalgebra.install(). Returns TRUE if already installed.
+#' The bigalgebra package for efficient algebraic operations on big.matrix objects
+#' is not currently on CRAN, and fails a check on dependencies. Changing the 
+#' description file to add the dependency, and linking 'BH' allows the package to work.
+#' This function attempts to check-out the latest version of bigalgebra from SVN
+#' version management system and corrects the description file then installs.
+#' Note you must also have 'BLAS' installed on your system to utilise this package
+#' effectively. PCA functions in the present package are better with bigalgebra installed,
+#' but will still run without it. For more information on installation alternatives, 
+#' type big.algebra.install.help().
+#' @seealso svn.bigalgebra.install
+#' @param verbose whether to report on installation progress/steps
+#' @export
+#' @examples
+#' # not run # big.algebra.install.help(TRUE)
 big.algebra.install.help <- function(verbose=F) {
   ## bigalgebra package doesn't install easily using the regular R way of installing packages
   # here try a simple way that might work, and if not, provide links and instructions to 
   # guide a manual installation
   try({ if(require(bigalgebra)) { return(T) } })
   cat("\nbigalgebra installation not found, will attempt to install now, but it can be tricky\n")
-  install.packages("bigalgebra", repos="http://R-Forge.R-project.org")
+  if("bigalgebra" %in% search.cran("big")[[1]]) { must.use.package("bigalgebra",T) }
+  do.call("install.packages",args=list("bigalgebra", repos="http://R-Forge.R-project.org"))
   if(require(bigalgebra)) {
     cat("bigalgebra seems to have installed successfully\n")
     return(T)
@@ -670,6 +880,36 @@ big.algebra.install.help <- function(verbose=F) {
 }
 
 
+#' Retrieve a big.matrix object
+#'
+#' This function can load a big.matrix object using a big.matrix.descriptor object, the
+#' name of a description file, the name of a binary file containing a big.matrix.descriptor
+#' or if passed a big.matrix object, it will just return that object. Only the object or
+#' file name plus the directory containing the backing file are required.
+#' @param fn the name of a description file, the name of a binary file containing a
+#'  big.matrix.descriptor, a big.matrix object or a big.matrix.descriptor object.
+#' @param dir directory containing the backing file (if not the working directory)
+#' @param verbose whether to display information on method being used, or minor warnings
+#' @export
+#' @examples
+#' library(bigmemory); 
+#' # set up a toy example of a big.matrix 
+#' bM <- filebacked.big.matrix(20, 50,
+#'        dimnames = list(paste("r",1:20,sep=""), paste("c",1:50,sep="")),
+#'        backingfile = "test.bck",  backingpath = getwd(), descriptorfile = "test.dsc")
+#' bM[1:20,] <- replicate(50,rnorm(20))
+#' # Now have a big matrix which can be retrieved using this function in 4 ways:
+#' d.bM <- describe(bM)
+#' save(d.bM,file="fn.RData")
+#' bM1 <- getBigMat("test.dsc")
+#' bM2 <- getBigMat(d.bM)
+#' bM3 <- getBigMat("fn.RData")
+#' bM4 <- getBigMat(bM)
+#' print.big.matrix(bM)
+#' print.big.matrix(bM1)
+#' print.big.matrix(bM2)
+#' print.big.matrix(bM3)
+#' print.big.matrix(bM4)
 getBigMat <- function(fn,dir="",verbose=F)
 {
   # loads a big.matrix either using an big.matrix description object
@@ -726,6 +966,9 @@ getBigMat <- function(fn,dir="",verbose=F)
 }
 
 
+
+
+#plumb cnv internal function
 load.data.to.bigmat <- function(dat.fn,inputType="TXT",bck,des,dir,Hopt=F,RNopt=T)
 {
   # get data stored in a text or binary file and get it into a bigmatrix object format
@@ -767,6 +1010,504 @@ load.data.to.bigmat <- function(dat.fn,inputType="TXT",bck,des,dir,Hopt=F,RNopt=
                     descriptorfile = des, extraCols = NULL)
     cat("complete\n")
   }
+}
+
+
+quick.mat.format <- function(fn) {
+  temp.fn <- "twmpwerw123.txt"
+  txtx <- readLines(fn,n=5)
+  writeLines(txtx,con=temp.fn)
+  first2 <- reader(temp.fn)
+  if(!is.null(rownames(first2))) { ern <- T } else { ern <- F }
+  if(!is.null(colnames(first2))) { ecn <- T } else { ecn <- F }
+  ncl <- ncol(first2)
+  unlink(temp.fn)
+  return(list(rownames=ern,colnames=ecn,ncol=ncl))
+}
+
+
+get.text.matrix.format <- function(fn,ncol=NA,header=NULL,row.names=NULL,sep="\t") 
+{
+  # read the first two lines of a text matrix file and determine
+  # whether it has row and or column names, return T/F indices for this
+  # plus a further 
+  # assumes tab as separator
+  fn <- fn[1]
+  if(!is.character(fn)) { warning("file name 'fn' should be a character()") }
+  if(!file.exists(fn)) { stop(paste("Error: file",fn,"not found")) } 
+  dat.file <- file(fn); headrow <- NULL
+  rnames.in.file <- F; first.is.head <- F; name.lookup <- F
+  # read first two lines of matrix format datafile
+  open(con=dat.file,open="r")
+  next.line <- readLines(dat.file,n=1)
+  line1 <- strsplit(next.line,sep,fixed=T)[[1]]
+  next.line <- readLines(dat.file,n=1)
+  line2 <- strsplit(next.line,sep,fixed=T)[[1]]
+  close(con=dat.file)
+  ## check whether first row is header or just plain data
+  frst <- length(line1)
+  scnd <- length(line2)
+  if(is.na(ncol)) {
+    if((scnd-frst)==1) { rnames.in.file <- T; first.is.head <- T; name.lookup <- F;
+                         headrow <- line1 }
+  } else {
+   # catdb(c("frst","ncol"))
+    if (frst!=ncol & frst!=ncol+1) {
+      stop("dimensions of import file do not match id lists specified, exiting")
+      break; break; 
+    } else {
+      if(length(which(paste(line1[1:10]) %in% paste(header)))>8) {
+        # first line seems to be the header
+        if(!all(header==paste(line1[(frst-ncol+1):frst]))) {
+          stop("Error: ID list did not match file header. Please check the files (head -1 <filename>) and fix this")
+        } else {
+          # will need to go to next line to avoid reading header as data
+          first.is.head <- T
+        }
+      } else {
+        first.is.head <- F
+      }
+    }
+    ## check whether second row starts with a rowname, or just plain data
+    if(length(line2)==ncol+1) {
+      rnames.in.file <- T
+    } else {
+      # seem to be no rownames in file
+      rnames.in.file <- F
+    }
+  }
+  # if colnames row found + header specified, check they are the same
+  if(first.is.head & !is.null(header)) {
+    if(!all(paste(line1)==paste(header))) {
+      if(!paste(line2[1]) %in% paste(header)) {
+        warning("there seems to be a header of column labels in the raw file but not the header specified\n",
+                "proceeding with these, but please check this mismatch is expected (e.g, might be col numbers)")
+        name.lookup <- F
+      } else {
+        warning("order of header (column labels) in data file does not match order of inputted 'header' list\n",
+                "proceeding, but using name lookup method will make import very slow and possibly unstable\n",
+                "If your source file has an inconsistent order this is the only supported import method.\n",
+                "Otherwise, recommend to cancel (ctrl-C), amend this discrepancy and run again")
+        name.lookup <- T
+      }
+    }
+  }
+  # if rownames row found + rownames specified, check they are the same
+  if(rnames.in.file & !is.null(row.names)) {
+    catdb(c("line2","row.names"),counts=list(1,1))
+    if(!paste(line2[1]) %in% paste(row.names[1:2])) {
+      if(!paste(line2[1]) %in% paste(row.names)) {
+        warning("there seem to be row labels in the raw file but not the rownames specified\n",
+                "proceeding with these, but please check this mismatch is expected (e.g, might be row numbers)")
+        name.lookup <- F
+      } else {
+        warning("order of row labels in data file does not match order of inputted rowname list\n",
+                "proceeding, but using name lookup method will make import very slow and possibly unstable\n",
+                "If your source file has an inconsistent order this is the only supported import method.\n",
+                "Otherwise, recommend to cancel (ctrl-C), amend this discrepancy and run again")
+        name.lookup <- T
+      }
+    }
+  }
+  out <- list(first.is.head,rnames.in.file,name.lookup,headrow)
+  names(out) <- c("header","rnames","match","colnames")
+  return(out)
+}
+
+
+# 
+# 
+# 
+# 
+# import.big.data <- function(fn,dir,rownames,colnames) {
+#   
+# }
+# 
+# 
+# #?  bafmode <- F # assume in LRR mode unless otherwise indicated by 'pref'
+# if(length(grep("BAF",toupper(pref)))>0) {
+#   ## note these must match initial bash script that extracts data!
+#   dat.file.suf <- "BAF.dat"; bafmode <- T
+# } else {
+#   dat.file.suf <- "LRR.dat"
+# }
+# if(all(is.null(input.fn))) {
+#   ## try to automatically detect datafiles if not specified
+#   if(is.data.tracker(DT)) {
+#     if(!bafmode) { input.fn <- getSlot(DT,"shape.lrr",grps=grp) 
+#     } else { input.fn <- getSlot(DT,"shape.baf",grps=grp) }
+#     if(is.list(input.fn)) { input.fn <- unlist(input.fn,recursive=F) } #cat("CHECK: removed 1 level of list\n") }
+# } else {
+#   if(!bafmode) { input.fn <- get.lrr.files(dir,grp,suffix=dat.file.suf)    
+#   } else { input.fn <- get.lrr.files(dir,grp,suffix=dat.file.suf,baf=T) }
+# }
+# if(!all(!is.null(cols.fn))) {
+#   if(is.data.tracker(DT)) {
+#     ## GET column names using data.tracker object 'DT'
+#     if(all(!is.na(grp))) {
+#       if(verbose) { cat(" getting ID list(s) for group",grp,"\n") }
+#       # return file lists, listed by 'group'; separate lists for each file despite grp
+#       ID.list <- unlist(getSlot(DT,"sub.cols",grps=grp,ret.obj=T),recursive=F)
+#     } else {
+#       ng <- getSlot(DT,"ngrps")
+#       if(length(input.fn)==1 & ng==1) {
+#         # all column namess in 1 set
+#         if(verbose) { cat(" 1 input file and 1 column names set only, getting IDs\n") }
+#         ID.list <- list(unlist(getSlot(DT,"column namess",ret.obj=T))) 
+#       } else {
+#         # separate list for each file listed by group sets
+#         if(verbose) { cat(" getting all ID lists ignoring group [",ng," groups]\n",sep="") }
+#         ID.list <- unlist(getSlot(DT,"sub.cols",ret.obj=T),recursive=F) 
+#       }
+#     }
+#   } else {
+#     ## GET column namess using 'file.spec.txt' # deprecated
+#     stop("if we need this code back, go to before march 19\n")
+#   }  
+# }
+#   if(is.data.tracker(DT)) {
+#     rows.fn <- getSlot(DT,"rows")
+#   } else {
+#     rows.fn <- find.file(rows.fn,dir$ano,dir)  # row annotation file name
+#   }
+#   
+#   if(!bafmode) {  
+#     ifn <- cat.path(dir$col,input.fn,must.exist=T)
+#   } else {  
+#     ifn <- cat.path(dir$baf.col,input.fn,must.exist=T)  
+#   }
+#   
+  
+  
+## bit of a mess  - give it a  goo!!
+  
+rox.args <- function(txt) {
+  # must change (")s to (')
+  tspl <- strsplit(txt,",",fixed=T)  
+  tspl2 <- sapply(tspl,strsplit,split="=",fixed=T)
+  pars <- sapply(tspl2,"[",1)
+  pars <- rmv.spc(pars)
+  pars <- paste("#' @param ",pars,"\n",sep="")
+  cat(pars,sep="")
+}
+
+#' Load a text file into a big.matrix object
+#'
+#' This provides a faster, although slightly less flexible way to import text data
+#' into a big.matrix object than bigmemory:::read.big.matrix(). Also will
+#' import R binary files containing a matrix into a big.matrix object. The text
+#' method is most important as it allows import of a matrix size exceeding RAM limits.
+#' @param input.fn
+#' @param dir
+#' @param grp
+#' @param rows.fn
+#' @param cols.fn
+#' @param dat.file.suf
+#' @param pref
+#' @param delete.existing
+#' @param ret.obj
+#' @param verbose
+#' @param row.names
+#' @param col.names
+#' @param dat.type
+#' @param dat.typeL
+#' @param ram.gb
+#' @param hd.gb
+#' @export
+#' @examples
+#' library(bigmemory); 
+#' # set up a toy example of a big.matrix 
+#' bM <- filebacked.big.matrix(20, 50,
+#'        dimnames = list(paste("r",1:20,sep=""), paste("c",1:50,sep="")),
+#'        backingfile = "test.bck",  backingpath = getwd(), descriptorfile = "test.dsc")
+#' bM[1:20,] <- replicate(50,rnorm(20))
+#' to test relative speed for larger matrices
+#' # Now have a big matrix which can be retrieved using this function in 4 ways:
+#' d.bM <- describe(bM)
+#' save(d.bM,file="fn.RData")
+#' # SETUP a test matrix 
+#' test.size <- 5 # try increasing this number for larger matrices
+#' M <- matrix(runif(10^test.size),ncol=10^(test.size-2)) # normal matrix
+#' write.table(M,sep="\t",col.names=F,row.names=F,file="functest.txt",quote=F) # no dimnames
+#' rown <- paste("rs",sample(10:99,nrow(M),replace=T),sample(10000:99999,nrow(M)),sep="")
+#' coln <- paste("ID",sample(1:9,ncol(M),replace=T),sample(10000:99999,ncol(M)),sep="")
+#' r.fn <- "rownames.txt"; c.fn <- "colnames.txt"
+#' Mdn <- M; colnames(Mdn) <- coln; rownames(Mdn) <- rown
+#' write.table(Mdn,sep="\t",col.names=T,row.names=T,file="functestdn.txt",quote=F) # with dimnames
+#' print.large(Mdn)
+#' in.fn <- "functestdn.txt" # "functest.txt"
+#' ### IMPORTING SIMPLE 1 FILE MATRIX ##
+#' writeLines(rown,r.fn); writeLines(coln,c.fn)
+#' # import without specifying row/column names
+#' ii <- import.big.data(in.fn); print.big.matrix(ii)
+#' # import using row/col names from file
+#' ii <- import.big.data(in.fn,
+#'  cols.fn="colnames.txt",rows.fn="rownames.txt"); print.big.matrix(ii)
+#' # import by passing colnames/rownames as objects
+#' ii <- import.big.data(in.fn,
+#'  col.names=coln,row.names=rown); print.big.matrix(ii)
+#' ### IMPORTING SIMPLE 1 FILE MATRIX ALREADY WITH DIMNAMES ##
+#' ### IMPORTING SIMPLE 1 FILE MATRIX ALREADY WITH MISORDERED col DIMNAMES ##
+#' ### IMPORTING SIMPLE 1 FILE MATRIX ALREADY WITH MISORDERED row DIMNAMES ##
+#' ### IMPORTING SIMPLE 1 FILE LONG by cols ##
+#' ### IMPORTING SIMPLE 1 FILE LONG by rows ##
+#' ### IMPORTING multifile rows MATRIX by rows ##
+#' ### IMPORTING multifile cols MATRIX by rows ##
+#' ### IMPORTING multifile rows MATRIX by cols ##
+#' ### IMPORTING multifile cols MATRIX by cols ##
+#' ### IMPORTING multifile LONG by rows ##
+#' ### IMPORTING multifile LONG by cols ##
+
+import.big.data <- function(input.fn=NULL, dir=getwd(), grp=NA, rows.fn=NULL, cols.fn=NULL, dat.file.suf=".dat",
+                              pref="", delete.existing=T, ret.obj=F, verbose=T, row.names=NULL, col.names=NULL,
+                              dat.type=double(1), dat.typeL="double", ram.gb=2, hd.gb=1000)
+{
+  # import from a text (hopefully long format) datafile to a big.matrix
+  # return bigmatrix description 'object' or name of description file according to 'ret.obj'
+  ### CALIBRATE OPTIONS AND PERFORM CHECKS ###
+  dir.force.slash <- reader:::dir.force.slash # use internal function from 'reader'
+  ## Define data types for big.matrix
+    # label
+  dir <- validate.dir.for(dir,c("ano","big","col"),warn=F)
+  input.fn <- cat.path(dir$col,input.fn)
+  spec.rn <- spec.cn <- T
+  #### GET THE SHAPED INPUT FILE NAME(S) ####
+  # print(input.fn)
+  #### GET THE CORRESPONDING column LIST(S) ####
+  if((length(col.names)>length(input.fn)) | is.list(col.names)) {
+    if(is.list(col.names))  {
+      if(all(sapply(col.names,is)[1,]=="character")) {
+        ID.list <- col.names
+      }
+    } else {
+      ID.list <- list(col.names)
+    }
+  } else {
+    if(all(!is.null(cols.fn))) {
+      cols.fn <- find.file(cols.fn,dir$ids)  # column id file name
+      cat("Reading column and row names...\n")
+      cat(paste(" reading column names from",cols.fn,"\n"))
+      ID.list <- lapply(cols.fn,readLines)  #readLines(cols.fn)
+    } else {
+      cat("no column names specified\n"); spec.cn <- F
+      ll <- max(1,length(cols.fn))
+      ID.list <- vector("list",ll)
+      for (cc in 1:ll) { ID.list[[cc]] <- paste("col",1:file.ncol(input.fn[cc],excl.rn=ern),sep="") }
+    }
+  }
+  ##print(headl(ID.list))
+  cmb.ID.list <- paste(unlist(do.call("c",ID.list)))
+  ##print(length(ID.list[[1]]))
+  num.c.fls <- length(ID.list)
+  ### GET THE ORDERED row LIST ###
+  if((length(row.names)>length(input.fn)) | is.list(row.names)) {
+    if(is.list(row.names))  {
+      if(all(sapply(row.names,is)[1,]=="character")) {
+        rows.list <- row.names
+      }
+    } else {
+      rows.list <- list(row.names)
+    }
+  } else {
+    if(all(!is.null(rows.fn))) {
+      rows.fn <- find.file(rows.fn,dir$ano,dir)  # row annotation file name
+      cat(paste(" reading row names from",rows.fn,"\n"))
+      rows.list <- lapply(rows.fn,readLines)  #readLines(cols.fn)
+    } else {
+      cat("no row names specified\n"); spec.rn <- F
+      ll <- max(1,length(cols.fn))
+      rows.list <- vector("list",ll)
+      for (cc in 1:ll) { rows.list[[cc]] <- paste("row",1:file.nrow(input.fn[cc]),sep="") }
+    }
+  }
+  cmb.row.list <- paste(unlist(do.call("c",rows.list)))
+  if(length(rows.list)>1 & length(ID.list)>1) {
+    warning("cannot enter both multiple row and column file names")
+    return(NULL)
+  }
+
+  num.r.fls <- length(rows.list)
+  numfls <- num.r.fls*num.c.fls # one of these should be 1
+  if(length(rows.list)>1) {
+    multi.mode <- T; col.mode <- F
+  } else {
+    if(length(ID.list)>1) {
+      multi.mode <- T; col.mode <- T
+    } else {
+      multi.mode <- F; col.mode <- T
+    }
+  }
+  #print(head(cmb.ID.list))
+  ## Multiple possible input situations: 
+  ##   FOR LRR: unlist all input files and subcols for selected grp
+  ##    n groups in study, 1 file each: should have input.fn length 1, id.list length 1
+  ##    n groups in study, m_n files each: should have input.fn length m_n, id.list length m_n
+  ##   FOR BAF: unlist all input files and subcols for all grps
+  ##    n groups in study, 1 file each: should have input.fn length n, id.list length n
+  ##    n groups in study, m_n files each: should have input.fn length sum_i(m_n=i), id.list length sum_i(m_n=i)
+  ## DEBUG print(length(input.fn)); print(numfls); print(input.fn)
+  if(length(input.fn)>1) {
+    if(length(input.fn)==numfls) {
+      if(verbose) {
+        if(col.mode) {
+          warning(paste("reading a single cohort from",numfls,"source files. Edit input parameters or file.spec.txt if this is unexpected"))
+        } else {
+          warning(paste("reading a single varset from",numfls,"source files. Edit input parameters or file.spec.txt if this is unexpected"))
+        }
+      }
+    } else {
+      stop("Error: when reading from multiple source files, need same number of row/col id files")
+    }
+  } else { if(numfls!=1) { warning(paste("length of ID list was",numfls,"but only 1 input file")) } } 
+  #### DETERMINE FILE DIMENSIONS ####
+  num.sub <- length(cmb.ID.list) #ID.list)
+  smp.szs <- sapply(ID.list,length)
+  num.row <- length(cmb.row.list)
+  row.szs <- sapply(rows.list,length)
+  catdb(c("num.sub","num.row","cmb.ID.list","cmb.row.list"))
+  if(col.mode) {
+    fil.ofs <- c(0,cumsum(smp.szs)) #note last element is the end of the last file
+  } else {
+    fil.ofs <- c(0,cumsum(row.szs))
+  }
+  cat(paste(" found",num.sub,"column names and",num.row,"marker names\n"))
+  cls <- num.sub; rws <- num.row
+  #cells.per.gb <- 2^27  # size of double() resulting in ~1GB of memory use by R 2.15
+  #memory.estimate <- as.double((as.double(rws)*as.double(cls))/cells.per.gb)
+  em <- estimate.memory(c(rws,cls))
+  if (em > hd.gb) {
+    stop(paste("Insufficient disk space availability (hd.gb) expected for this import method\n",
+     "Please free up some disk space and try again",sep=""))
+  } else {
+    divs <- em/(ram.gb/2) # aim to flush once memory reaches half of RAM
+    if(divs<1) { do.fl <- F } else { do.fl <- T }
+    divs <- round(divs)
+  }
+  # use 'pref' as the name of the big.matrix backing files for this cohort
+  bck.fn <- paste(pref,"bckfile",sep="")
+  des.fn <- paste(pref,"descrFile",sep="")
+  ### DELETE EXISTING FILE IF HAS SAME NAME ###
+  if ((!des.fn %in% list.files(dir$big)) | delete.existing )
+  {
+    if(delete.existing & (des.fn %in% list.files(dir$big)))
+    {
+      dfn <- cat.path(dir$big,des.fn)
+      cat("\n deleting",dfn,"\n")
+      unlink(dfn)
+    } else {
+      #all clear, no files already exist with same name
+    }
+  } else {
+    cat(paste("\nWarning: Big matrix description file",des.fn,"already exists in",dir$big,"\n"))
+    cat("You may wish to delete, rename or move this file, or use option 'delete.existing'=T, before re-running this script\n")
+    #stop()
+  }
+  ### MAIN IMPORT LOOP ###
+  cat("\nCreating big matrix object to store group data")
+  cat("\n predicted disk use: ",round(em,1),"GB\n")
+  if(is.character(dir.force.slash(dir$big))) { if(dir$big=="") { dir$big <- getwd() } }
+  bigVar <- big.matrix(nrow=rws,ncol=cls, backingfile=bck.fn, dimnames=list(cmb.row.list,cmb.ID.list),
+                       type=dat.typeL, backingpath=dir.force.slash(dir$big),
+                       descriptorfile=des.fn)
+  for(ff in 1:numfls) {
+    ifn <- cat.path(dir$col,input.fn[ff],must.exist=T)
+    if(col.mode) { ffc <- ff; ffr <- 1 } else { ffc <- 1; ffr <- ff }
+    # previously: create file name depending on whether in baf or lrr directory
+    #test file type if matrix
+    if(file.ncol(ifn[ff])>1) { input.is.vec <- F } else { input.is.vec <- T }
+    nxt.rng <- (fil.ofs[ff]+1):(fil.ofs[ff+1])
+    if(col.mode) { cls1 <- length(nxt.rng); rws1 <- rws } else { cls1 <- cls; rws1 <- length(nxt.rng) }
+    catdb(c("cls1","rws1","cls","rws"))
+    if(!input.is.vec) {
+      if(spec.rn & spec.cn) {
+        frm <- get.text.matrix.format(fn=ifn[ff],ncol=cls1,header=ID.list[[ff]],row.names=rows.list[[ffr]])
+      } else {
+        frm <- get.text.matrix.format(fn=ifn[ff])
+        if(!is.null(frm$colnames)) { ID.list[[ff]][1:length(frm$colnames)] <- frm$colnames }
+      }
+      if(frm$rname & !frm$match) { file.rn <- character(cls) } # recording rownames as we go
+      if(frm$match & !col.mode) { stop("cannot use matching method with separate files by rows") }
+    }
+    dat.file <- file(ifn[ff])
+    open(con=dat.file,open="r")
+    cat(paste(" opening connection to ",c("matrix","long")[1+input.is.vec],
+              " format datafile (",ff,"/",numfls,"): ",basename(ifn[ff]),"\n",sep=""))
+    cat("\nLoading text data into big matrix object:\n")
+    if(!input.is.vec)
+    {
+      ## read from matrix format tab file
+      twty.pc <- round(rws1/divs) # flush data every 'n' rows
+      for (cc in 1:rws1) {
+        if (do.fl & (cc %% twty.pc)==0)  { fl.suc <- flush(bigVar) ; if(!fl.suc) { cat("flush failed\n") } }
+        loop.tracker(cc,rws1)
+        next.line <- readLines(dat.file,n=1)
+        next.row <- strsplit(next.line,"\t",fixed=T)[[1]]
+        if (cc==1 & frm$header) { 
+          # need to go to next line to avoid reading header as data
+          next.line <- readLines(dat.file,n=1); next.row <- strsplit(next.line,"\t",fixed=T)[[1]]
+        }
+        if (frm$rnames) {
+          if(frm$match) {
+            lbl <- next.row[1]; 
+            bigVar[match(lbl,cmb.row.list),nxt.rng] <- next.row[-1]
+          } else {
+            if(col.mode) {
+              catdb("bigVar",counts=list(cc=cc,nxt.rng=nxt.rng[1]))
+              catdb(c("next.row","nxt.rng"))
+              file.rn[cc] <- next.row[1]; bigVar[cc,nxt.rng] <- next.row[-1]
+            } else {
+              selc <- 1:(length(next.row)-1)
+              file.rn[nxt.rng[cc]] <- next.row[1]; bigVar[nxt.rng[cc],selc] <- next.row[-1]
+            }
+          }
+        } else {
+          if(col.mode) {
+            bigVar[cc,nxt.rng] <- next.row
+          } else {
+            bigVar[nxt.rng[cc],] <- next.row
+          }
+        }
+      }
+    } else {
+      ## read from (long) vector format tab file
+      if(col.mode) {
+        ## col-wise file splits
+        twty.pc <- round(cls1/divs) # flush data every 'n' cols
+        for (cc in 1:cls1) {
+          loop.tracker(cc,cls1)
+          if (do.fl & (cc %% twty.pc)==0)  { fl.suc <- flush(bigVar) ; if(!fl.suc) { cat("flush failed\n") } }
+          bigVar[,(cc+fil.ofs[ff])] <- as(readLines(dat.file,n=rws1),dat.typeL)
+        }
+      } else {
+        ## row-wise file splits
+        twty.pc <- round(rws1/divs)
+        for (cc in 1:rws1) {
+          loop.tracker(cc,rws1)
+          if (do.fl &(cc %% twty.pc)==0)  { fl.suc <- flush(bigVar) ; if(!fl.suc) { cat("flush failed\n") } }
+          bigVar[(cc+fil.ofs[ff]),] <- as(readLines(dat.file,n=cls1),dat.typeL)
+        }
+      }
+    }
+    close(dat.file)
+  }
+  ### FINISH UP, RETURN BIGMATRIX DESCRIPTION ###
+  # in the case of different rownames found in matrix, then show following warning text:
+  if(!input.is.vec) {
+    if(frm$rname & !frm$match) {
+      ofn <- cat.path(dir$ano,pref=pref,"_file_rowname_list_check_this.txt")
+      warning(paste("rownames didn't match what was in file, check the list in the file at:\n ",ofn))
+      writeLines(paste(file.rn),con=ofn) ; cat("\n file preview:\n"); print(head(file.rn,10)); cat("\n")
+    }
+  }
+  cat("\n")
+  cat(paste(" created big.matrix description file:",des.fn,"\n"))
+  cat(paste(" created big.matrix backing file:",bck.fn,"\n"))
+  if(ret.obj) {
+    return(describe(bigVar))
+  } else {
+    return(des.fn)
+  }
+  cat("...complete!\n")
 }
 
 
