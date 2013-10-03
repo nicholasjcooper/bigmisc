@@ -334,6 +334,30 @@ pca.scree.plot <- function(eigenv,elbow=NA,printvar=T,min.dim=NA,M=NULL,add.fit.
 
 
 
+
+
+
+### add to NCmisc
+## equivalent to base:::substitute but can do any length of arguments
+Substitute <- function(x=NULL,...) {
+  varlist <- list(...); out <- character(1)
+  if(length(varlist)>0) { 
+    extr <- var.to.char(...)
+  } else {
+    extr <- NULL
+  }
+  if(!is.null(x)) { out[1] <- paste(substitute(x)) }
+  out <- c(out,extr)
+  return(out[out!=""])
+}
+
+
+## same as cat.db but no labels command, and input is without quotes
+catdb <- function(...,counts=NULL) {
+  varlist <- Substitute(...)
+  return(cat.db(varlist,labels=NULL,counts=counts))
+}
+
 #' Output variable states within functions during testing/debugging
 #'
 #' # to put into NCmisc
@@ -358,22 +382,22 @@ pca.scree.plot <- function(eigenv,elbow=NA,printvar=T,min.dim=NA,M=NULL,add.fit.
 #' testvar3 <- c(1:10)
 #' testvar4 <- matrix(rnorm(100),nrow=25)
 #' testvar5 <- list(first="test",second=testvar4,third=100:110)
-#' catdb("testvar1")
-#' catdb("testvar4")
-#' catdb(paste("testvar",1:5,sep=""))
-#' catdb(testvar1,"myvarname")
-#' catdb(testvar1)
+#' cat.db("testvar1")
+#' cat.db("testvar4")
+#' cat.db(paste("testvar",1:5,sep=""))
+#' cat.db(testvar1,"myvarname")
+#' cat.db(testvar1)
 #' # examples with loops and multiple dimensions / lists
 #' for (cc in 1:4) {
-#'  for (dd in 1:4) { catdb("testvar4",counts=list(cc,dd)) }}
+#'  for (dd in 1:4) { cat.db("testvar4",counts=list(cc,dd)) }}
 #'
-#' for (dd in 1:3) { catdb("testvar5",counts=list(dd=dd)) }
-catdb <- function(varlist,labels=NULL,counts=NULL) {
+#' for (dd in 1:3) { cat.db("testvar5",counts=list(dd=dd)) }
+cat.db <- function(varlist,labels=NULL,counts=NULL) {
   ## for debugging, simplify code to print vars you are checking
   lab <- varlist
   # test whether 'counts' sublists are all of the same length as varlist, else ignore 'counts'
   if(is.list(counts)) {  if(!all(sapply(counts,length)==length(varlist))) { 
-    counts <- NULL } } else { counts <- NULL }
+    counts <- NULL } } else { if(length(counts)==length(varlist)) { counts <- list(counts) } else { counts <- NULL } }
   #val <- vector("list",length(lab))
   display.var <- function(val,label,cnts=NULL) {
     if(is(cnts)[1]=="list") {
@@ -389,7 +413,8 @@ catdb <- function(varlist,labels=NULL,counts=NULL) {
         }
       } else {
         #val <- val[cnts[[dd]] ]
-        if(length(dim(val))!=length(cnts)) {
+        #cat.db(c("val","cnts"))
+        if(length(Dim(val))!=length(cnts)) {
           val <- val ; warning("counts did not match dimensions")
         } else {
           arg.list <- vector("list",1+length(cnts)); arg.list[[1]] <- val
@@ -403,6 +428,8 @@ catdb <- function(varlist,labels=NULL,counts=NULL) {
           }
         }
       }
+    } else {
+      #counts not a list
     }
     ## display appropriately according to datatype ##
     typ <- is(val)[1]
@@ -427,13 +454,17 @@ catdb <- function(varlist,labels=NULL,counts=NULL) {
     }
   }
   ## if data not entered as
-  if(!is.character(varlist) | !is.null(labels)) { 
-    if(is.null(labels) | (length(varlist)!=length(labels))) { 
-      display.var(varlist,"unknown variable")
+  if(!is.character(varlist) | !is.null(labels)) {
+    if(is.null(labels) | ((length(labels)!=1) & (length(varlist)!=length(labels)))) {
+      display.var(varlist,"unknown variable"); cat("\n")
     } else { 
       for(cc in 1:length(labels)){
         if(is.list(counts)) { cnts <- lapply(counts,"[",cc) } else { cnts <- NULL }
-        display.var(varlist[cc],labels[cc],cnts=cnts)
+        if(is.list(varlist)) {
+          display.var(varlist[[cc]],labels[cc],cnts=cnts)
+        } else {
+          display.var(varlist[cc],labels[cc],cnts=cnts)
+        }
         cat("\n") 
       }
       return(invisible())
@@ -464,7 +495,7 @@ catdb <- function(varlist,labels=NULL,counts=NULL) {
 #' @param x the object to find the dimension for
 #' @param cat.lists logical, for lists, TRUE will concatenate the dimesions to a single string,
 #'  or FALSE will return the sizes as a list of the same structure as the original.
-#' @seealso catdb
+#' @seealso catdb, cat.db
 #' @export
 #' @examples
 #' # create variables of different types to show output styles #
@@ -1013,20 +1044,28 @@ load.data.to.bigmat <- function(dat.fn,inputType="TXT",bck,des,dir,Hopt=F,RNopt=
 }
 
 
+# internal? function to quickly extract whether a delimited matrix
+# has row or column names, and what the column names are
 quick.mat.format <- function(fn) {
   temp.fn <- "twmpwerw123.txt"
-  txtx <- readLines(fn,n=5)
+  txtx <- readLines(fn,n=11) # change this to like 5 when reader is updated to save memory
   writeLines(txtx,con=temp.fn)
   first2 <- reader(temp.fn)
-  if(!is.null(rownames(first2))) { ern <- T } else { ern <- F }
-  if(!is.null(colnames(first2))) { ecn <- T } else { ecn <- F }
+  if(is.null(dim(first2))) {
+    ## assuming no header row #
+    return(list(rownames=F,colnames=F,ncol=1,cnames=NULL))
+  }
+  rn <- rownames(first2); if(rn[1]=="1") { rn <- NULL }
+  if(!is.null(rn)) { ern <- T } else { ern <- F }
+  cn <- colnames(first2); if(cn[1]=="V1") { cn <- NULL }
+  if(!is.null(cn)) { ecn <- T } else { ecn <- F }
   ncl <- ncol(first2)
   unlink(temp.fn)
-  return(list(rownames=ern,colnames=ecn,ncol=ncl))
+  return(list(rownames=ern,colnames=ecn,ncol=ncl,cnames=cn))
 }
 
 
-get.text.matrix.format <- function(fn,ncol=NA,header=NULL,row.names=NULL,sep="\t") 
+check.text.matrix.format <- function(fn,ncol=NA,header=NULL,row.names=NULL,sep="\t") 
 {
   # read the first two lines of a text matrix file and determine
   # whether it has row and or column names, return T/F indices for this
@@ -1053,13 +1092,14 @@ get.text.matrix.format <- function(fn,ncol=NA,header=NULL,row.names=NULL,sep="\t
   } else {
    # catdb(c("frst","ncol"))
     if (frst!=ncol & frst!=ncol+1) {
+      cat.db(c("frst","ncol"))
       stop("dimensions of import file do not match id lists specified, exiting")
       break; break; 
     } else {
       if(length(which(paste(line1[1:10]) %in% paste(header)))>8) {
         # first line seems to be the header
         if(!all(header==paste(line1[(frst-ncol+1):frst]))) {
-          stop("Error: ID list did not match file header. Please check the files (head -1 <filename>) and fix this")
+          stop("Error: ID list did not match file header. Please check the files (bash$ head -1 <filename>) and fix this")
         } else {
           # will need to go to next line to avoid reading header as data
           first.is.head <- T
@@ -1094,7 +1134,7 @@ get.text.matrix.format <- function(fn,ncol=NA,header=NULL,row.names=NULL,sep="\t
   }
   # if rownames row found + rownames specified, check they are the same
   if(rnames.in.file & !is.null(row.names)) {
-    catdb(c("line2","row.names"),counts=list(1,1))
+   # catdb(c("line2","row.names"),counts=list(1,1))
     if(!paste(line2[1]) %in% paste(row.names[1:2])) {
       if(!paste(line2[1]) %in% paste(row.names)) {
         warning("there seem to be row labels in the raw file but not the rownames specified\n",
@@ -1226,7 +1266,7 @@ rox.args <- function(txt) {
 #' d.bM <- describe(bM)
 #' save(d.bM,file="fn.RData")
 #' # SETUP a test matrix 
-#' test.size <- 5 # try increasing this number for larger matrices
+#' test.size <- 6 # try increasing this number for larger matrices
 #' M <- matrix(runif(10^test.size),ncol=10^(test.size-2)) # normal matrix
 #' write.table(M,sep="\t",col.names=F,row.names=F,file="functest.txt",quote=F) # no dimnames
 #' rown <- paste("rs",sample(10:99,nrow(M),replace=T),sample(10000:99999,nrow(M)),sep="")
@@ -1235,30 +1275,84 @@ rox.args <- function(txt) {
 #' Mdn <- M; colnames(Mdn) <- coln; rownames(Mdn) <- rown
 #' write.table(Mdn,sep="\t",col.names=T,row.names=T,file="functestdn.txt",quote=F) # with dimnames
 #' print.large(Mdn)
-#' in.fn <- "functestdn.txt" # "functest.txt"
+#' writeLines(paste(as.vector(M)),con="funclongcol.txt")
+#' writeLines(paste(as.vector(t(M))),con="funclongrow.txt")
+#' in.fn <- "functest.txt"
 #' ### IMPORTING SIMPLE 1 FILE MATRIX ##
 #' writeLines(rown,r.fn); writeLines(coln,c.fn)
-#' # import without specifying row/column names
-#' ii <- import.big.data(in.fn); print.big.matrix(ii)
-#' # import using row/col names from file
+#' #1. import without specifying row/column names
+#' ii <- import.big.data(in.fn); print.big.matrix(ii) # SLOWER without dimnames!
+#' #2. import using row/col names from file
 #' ii <- import.big.data(in.fn,
 #'  cols.fn="colnames.txt",rows.fn="rownames.txt"); print.big.matrix(ii)
-#' # import by passing colnames/rownames as objects
+#' #3. import by passing colnames/rownames as objects
 #' ii <- import.big.data(in.fn,
 #'  col.names=coln,row.names=rown); print.big.matrix(ii)
 #' ### IMPORTING SIMPLE 1 FILE MATRIX ALREADY WITH DIMNAMES ##
+#  # run tests 1-3 with: # in.fn <- "functestdn.txt"
 #' ### IMPORTING SIMPLE 1 FILE MATRIX ALREADY WITH MISORDERED col DIMNAMES ##
+#' coln2 <- coln; coln <- sample(coln)
+#' # re-run test3 using in.fn with dimnames # should fail with ERROR
+#' # restore using:  coln <- coln2
 #' ### IMPORTING SIMPLE 1 FILE MATRIX ALREADY WITH MISORDERED row DIMNAMES ##
+#' rown2 <- rown; rown <- sample(rown);
+#' # re-run test3 using in.fn with dimnames
+#' # restore using: rown <- rown2
 #' ### IMPORTING SIMPLE 1 FILE LONG by cols ##
+#' in.fn <- "funclongcol.txt"; #rerun 1:3 # nb: 1 should fail!
 #' ### IMPORTING SIMPLE 1 FILE LONG by rows ##
-#' ### IMPORTING multifile rows MATRIX by rows ##
-#' ### IMPORTING multifile cols MATRIX by rows ##
-#' ### IMPORTING multifile rows MATRIX by cols ##
-#' ### IMPORTING multifile cols MATRIX by cols ##
+#' #in.fn <- "funclongrow.txt" - although there is no such supported behaviour!
 #' ### IMPORTING multifile LONG by rows ##
+#' splF <- factor(rep(c(1,2,3),nrow(M)*c(.1,.5,.4)))
+#' rownL <- split(rown,splF)
+#' Ms <- split(M,splF); Ms <- lapply(Ms,function(X) { dim(X) <- c(length(X)/ncol(M),ncol(M)); X } )
+#' rowfs <- paste("rn",1:length(rownL),".txt",sep="")
+#' infs <- paste("split",1:length(rownL),".txt",sep="")
+#' for(cc in 1:length(rownL)) { writeLines(rownL[[cc]],con=rowfs[cc]) }
+#' for(cc in 1:length(infs)) { writeLines(paste(as.vector((Ms[[cc]]))),con=infs[cc]) }
+#' # [A] read in using three separate files split by rowname groups 
+#' ii <- import.big.data(infs,
+#'  cols.fn="colnames.txt",rows.fn=rowfs); print.big.matrix(ii)
+#' ii <- import.big.data(infs,
+#'  col.names=coln,row.names=rownL); print.big.matrix(ii)
 #' ### IMPORTING multifile LONG by cols ##
-
-import.big.data <- function(input.fn=NULL, dir=getwd(), grp=NA, rows.fn=NULL, cols.fn=NULL, dat.file.suf=".dat",
+#' splF <- factor(rep(c(1,2,3),ncol(M)*c(.1,.5,.4)))
+#' colnL <- split(coln,splF); MM <- as.data.frame(t(M))
+#' Ms2 <- split(MM,splF); Ms2 <- lapply(Ms2,function(X) { X <- t(X); dim(X) <- c(nrow(M),length(X)/nrow(M)); X } )
+#' #lapply(Ms2,print.large)
+#' colfs <- paste("cn",1:length(colnL),".txt",sep="")
+#' infs <- paste("split",1:length(colnL),".txt",sep="")
+#' for(cc in 1:length(colnL)) { writeLines(colnL[[cc]],con=colfs[cc]) }
+#' for(cc in 1:length(infs)) { writeLines(paste(as.vector((Ms2[[cc]]))),con=infs[cc]) }
+#' # [B] read in using three separate files split by rowname groups
+#' ii <- import.big.data(infs,
+#'  cols.fn=colfs,rows.fn="rownames.txt"); print.big.matrix(ii)
+#' ii <- import.big.data(infs,
+#'  col.names=colnL,row.names=rown); print.big.matrix(ii)
+#' ### IMPORTING multifile MATRIX by rows ##
+#' infs <- paste("splitmatR",1:length(colnL),".txt",sep="")
+#' for(cc in 1:length(infs)) { write.table(Ms[[cc]],sep="\t",col.names=F,row.names=F,file=infs[cc],quote=F) }
+#' # test using A
+#' ### IMPORTING multifile MATRIX by cols ##
+#' infs <- paste("splitmatC",1:length(colnL),".txt",sep="")
+#' for(cc in 1:length(infs)) { write.table(Ms2[[cc]],sep="\t",col.names=F,row.names=F,file=infs[cc],quote=F) }
+#' # test using B
+#' ### IMPORTING multifile MATRIX by rows with dimnames ##
+#' dMs <- Ms; dMs2 <- Ms2; 
+#' for (cc in 1:length(colnL)) {
+#'  rownames(Ms[[cc]]) <- rownL[[cc]]; colnames(Ms[[cc]]) <- coln
+#'  rownames(Ms2[[cc]]) <- rown; colnames(Ms2[[cc]]) <- colnL[[cc]]
+#' }
+#' infs <- paste("splitmatRd",1:length(colnL),".txt",sep="")
+#' for(cc in 1:length(infs)) { write.table(Ms[[cc]],sep="\t",file=infs[cc],quote=F) }
+#' # test using A
+#' ### IMPORTING multifile MATRIX by cols with dimnames ##
+#' infs <- paste("splitmatCd",1:length(colnL),".txt",sep="")
+#' for(cc in 1:length(infs)) { write.table(Ms2[[cc]],sep="\t",file=infs[cc],quote=F) }
+#' # test using B
+#' # restore matrices: Ms <- dMs; Ms2 <- dMs2
+#' ## ALLL TESTS PASSED!! ##
+import.big.data <- function(input.fn=NULL, dir=getwd(), grp=NA, long=F, rows.fn=NULL, cols.fn=NULL, dat.file.suf=".dat",
                               pref="", delete.existing=T, ret.obj=F, verbose=T, row.names=NULL, col.names=NULL,
                               dat.type=double(1), dat.typeL="double", ram.gb=2, hd.gb=1000)
 {
@@ -1270,9 +1364,17 @@ import.big.data <- function(input.fn=NULL, dir=getwd(), grp=NA, rows.fn=NULL, co
     # label
   dir <- validate.dir.for(dir,c("ano","big","col"),warn=F)
   input.fn <- cat.path(dir$col,input.fn)
-  spec.rn <- spec.cn <- T
+  file.rn <- character()
+  spec.rn <- spec.cn <- T; miswarn <- F
   #### GET THE SHAPED INPUT FILE NAME(S) ####
   # print(input.fn)
+  if(length(input.fn)>1 & ((is.null(rows.fn)&is.null(row.names)) | (is.null(cols.fn)&is.null(col.names)))) {
+    stop(paste("When using multiple input files, you must specify row and column names using",
+               "row.names + col.names, or rows.fn + cols.fn.",
+               "If the input files split the dataset by columns, then the column file names need",
+               "to be entered as a list corresponding to unique column names in each input.fn entry,",
+               "OR equivalently, a equal length list of row names if the data is split by rows"))
+  }
   #### GET THE CORRESPONDING column LIST(S) ####
   if((length(col.names)>length(input.fn)) | is.list(col.names)) {
     if(is.list(col.names))  {
@@ -1292,11 +1394,20 @@ import.big.data <- function(input.fn=NULL, dir=getwd(), grp=NA, rows.fn=NULL, co
       cat("no column names specified\n"); spec.cn <- F
       ll <- max(1,length(cols.fn))
       ID.list <- vector("list",ll)
-      for (cc in 1:ll) { ID.list[[cc]] <- paste("col",1:file.ncol(input.fn[cc],excl.rn=ern),sep="") }
+      qmf <- quick.mat.format(input.fn[1])
+      if(qmf$ncol==1 | long)  { stop("If reading a long format file, must provide row and column names directly, or via filenames") }
+      ecn <- qmf$colnames
+      ern <- qmf$rownames; #catdb("ern")
+      if(ecn) {
+        for (cc in 1:ll) { ID.list[[cc]] <- quick.mat.format(input.fn[cc])$cnames }
+      } else {
+        for (cc in 1:ll) { ID.list[[cc]] <- paste("col",1:file.ncol(input.fn[cc],excl.rn=ern),sep="") }
+      }
     }
   }
   ##print(headl(ID.list))
   cmb.ID.list <- paste(unlist(do.call("c",ID.list)))
+  if(anyDuplicated(cmb.ID.list)) { stop("Cannot have duplicated column names") }
   ##print(length(ID.list[[1]]))
   num.c.fls <- length(ID.list)
   ### GET THE ORDERED row LIST ###
@@ -1317,15 +1428,19 @@ import.big.data <- function(input.fn=NULL, dir=getwd(), grp=NA, rows.fn=NULL, co
       cat("no row names specified\n"); spec.rn <- F
       ll <- max(1,length(cols.fn))
       rows.list <- vector("list",ll)
-      for (cc in 1:ll) { rows.list[[cc]] <- paste("row",1:file.nrow(input.fn[cc]),sep="") }
+      ecn <- as.numeric(quick.mat.format(input.fn[1])$colnames)
+      for (cc in 1:ll) { 
+        nr <- (file.nrow(input.fn[cc])-ecn)
+        rows.list[[cc]] <- paste("row",1:nr,sep="") 
+      }
     }
   }
   cmb.row.list <- paste(unlist(do.call("c",rows.list)))
+  if(anyDuplicated(cmb.row.list)) { stop("Cannot have duplicated row names") }
   if(length(rows.list)>1 & length(ID.list)>1) {
     warning("cannot enter both multiple row and column file names")
     return(NULL)
   }
-
   num.r.fls <- length(rows.list)
   numfls <- num.r.fls*num.c.fls # one of these should be 1
   if(length(rows.list)>1) {
@@ -1350,13 +1465,13 @@ import.big.data <- function(input.fn=NULL, dir=getwd(), grp=NA, rows.fn=NULL, co
     if(length(input.fn)==numfls) {
       if(verbose) {
         if(col.mode) {
-          warning(paste("reading a single cohort from",numfls,"source files. Edit input parameters or file.spec.txt if this is unexpected"))
+          cat(paste("reading a single cohort from",numfls,"source files.\n"))
         } else {
-          warning(paste("reading a single varset from",numfls,"source files. Edit input parameters or file.spec.txt if this is unexpected"))
+          cat(paste("reading a single varset from",numfls,"source files.\n"))
         }
       }
     } else {
-      stop("Error: when reading from multiple source files, need same number of row/col id files")
+      stop("Error: when reading from multiple source files, need an equal number of row or col id files")
     }
   } else { if(numfls!=1) { warning(paste("length of ID list was",numfls,"but only 1 input file")) } } 
   #### DETERMINE FILE DIMENSIONS ####
@@ -1364,7 +1479,7 @@ import.big.data <- function(input.fn=NULL, dir=getwd(), grp=NA, rows.fn=NULL, co
   smp.szs <- sapply(ID.list,length)
   num.row <- length(cmb.row.list)
   row.szs <- sapply(rows.list,length)
-  catdb(c("num.sub","num.row","cmb.ID.list","cmb.row.list"))
+  #catdb(c("num.sub","num.row","cmb.ID.list","cmb.row.list"))
   if(col.mode) {
     fil.ofs <- c(0,cumsum(smp.szs)) #note last element is the end of the last file
   } else {
@@ -1414,24 +1529,29 @@ import.big.data <- function(input.fn=NULL, dir=getwd(), grp=NA, rows.fn=NULL, co
     if(col.mode) { ffc <- ff; ffr <- 1 } else { ffc <- 1; ffr <- ff }
     # previously: create file name depending on whether in baf or lrr directory
     #test file type if matrix
-    if(file.ncol(ifn[ff])>1) { input.is.vec <- F } else { input.is.vec <- T }
+    cat.db(c("ff","numfls","ifn","col.mode","ffr","ffc"))
+    if(long) { input.is.vec <- T } else {
+      if(file.ncol(ifn)>1) { input.is.vec <- F } else { input.is.vec <- T }
+    }
     nxt.rng <- (fil.ofs[ff]+1):(fil.ofs[ff+1])
+    cat.db("nxt.rng")
     if(col.mode) { cls1 <- length(nxt.rng); rws1 <- rws } else { cls1 <- cls; rws1 <- length(nxt.rng) }
-    catdb(c("cls1","rws1","cls","rws"))
+    cat.db(c("cls1","rws1","cls","rws"))
     if(!input.is.vec) {
       if(spec.rn & spec.cn) {
-        frm <- get.text.matrix.format(fn=ifn[ff],ncol=cls1,header=ID.list[[ff]],row.names=rows.list[[ffr]])
+        frm <- check.text.matrix.format(fn=ifn,ncol=cls1,header=ID.list[[ffc]],row.names=rows.list[[ffr]])
+        #catdb(c("cls1","rws1","cls","frm"))
       } else {
-        frm <- get.text.matrix.format(fn=ifn[ff])
+        frm <- check.text.matrix.format(fn=ifn)
         if(!is.null(frm$colnames)) { ID.list[[ff]][1:length(frm$colnames)] <- frm$colnames }
       }
-      if(frm$rname & !frm$match) { file.rn <- character(cls) } # recording rownames as we go
+      if(frm$rname & !frm$match) { file.rn <- character(rws) } # recording rownames as we go
       if(frm$match & !col.mode) { stop("cannot use matching method with separate files by rows") }
     }
-    dat.file <- file(ifn[ff])
+    dat.file <- file(ifn)
     open(con=dat.file,open="r")
     cat(paste(" opening connection to ",c("matrix","long")[1+input.is.vec],
-              " format datafile (",ff,"/",numfls,"): ",basename(ifn[ff]),"\n",sep=""))
+              " format datafile (",ff,"/",numfls,"): ",basename(ifn),"\n",sep=""))
     cat("\nLoading text data into big matrix object:\n")
     if(!input.is.vec)
     {
@@ -1449,11 +1569,13 @@ import.big.data <- function(input.fn=NULL, dir=getwd(), grp=NA, rows.fn=NULL, co
         if (frm$rnames) {
           if(frm$match) {
             lbl <- next.row[1]; 
-            bigVar[match(lbl,cmb.row.list),nxt.rng] <- next.row[-1]
+            row.sel <- match(lbl,cmb.row.list)
+            bigVar[row.sel,nxt.rng] <- next.row[-1]
+            file.rn[row.sel] <- lbl
           } else {
             if(col.mode) {
-              catdb("bigVar",counts=list(cc=cc,nxt.rng=nxt.rng[1]))
-              catdb(c("next.row","nxt.rng"))
+              #catdb("bigVar",counts=list(cc=cc,nxt.rng=nxt.rng[1]))
+              #catdb(c("next.row","nxt.rng"))
               file.rn[cc] <- next.row[1]; bigVar[cc,nxt.rng] <- next.row[-1]
             } else {
               selc <- 1:(length(next.row)-1)
@@ -1476,15 +1598,15 @@ import.big.data <- function(input.fn=NULL, dir=getwd(), grp=NA, rows.fn=NULL, co
         for (cc in 1:cls1) {
           loop.tracker(cc,cls1)
           if (do.fl & (cc %% twty.pc)==0)  { fl.suc <- flush(bigVar) ; if(!fl.suc) { cat("flush failed\n") } }
-          bigVar[,(cc+fil.ofs[ff])] <- as(readLines(dat.file,n=rws1),dat.typeL)
+          bigVar[,(cc+fil.ofs[ff])] <- as(readLines(dat.file,n=rws),dat.typeL)
         }
       } else {
         ## row-wise file splits
         twty.pc <- round(rws1/divs)
-        for (cc in 1:rws1) {
-          loop.tracker(cc,rws1)
+        for (cc in 1:cls) {
+          loop.tracker(cc,cls)
           if (do.fl &(cc %% twty.pc)==0)  { fl.suc <- flush(bigVar) ; if(!fl.suc) { cat("flush failed\n") } }
-          bigVar[(cc+fil.ofs[ff]),] <- as(readLines(dat.file,n=cls1),dat.typeL)
+          bigVar[nxt.rng,cc] <- as(readLines(dat.file,n=rws1),dat.typeL)
         }
       }
     }
@@ -1494,9 +1616,37 @@ import.big.data <- function(input.fn=NULL, dir=getwd(), grp=NA, rows.fn=NULL, co
   # in the case of different rownames found in matrix, then show following warning text:
   if(!input.is.vec) {
     if(frm$rname & !frm$match) {
-      ofn <- cat.path(dir$ano,pref=pref,"_file_rowname_list_check_this.txt")
-      warning(paste("rownames didn't match what was in file, check the list in the file at:\n ",ofn))
+      if(!spec.rn) {
+        if(nrow(bigVar)==length(file.rn)) {
+          options(bigmemory.allow.dimnames=TRUE)
+          rownames(bigVar) <- file.rn; cat("updated big.matrix rownames from names in file(s)\n")
+          flush(bigVar)
+          big.des <- describe(bigVar)
+          des.fn <- cat.path(fn=des.fn,ext="RData")
+          save(big.des,file=des.fn)
+          warning("Had to change description file to a binary file to update rownames. This can be read in with getBigMat() [and should be faster to load]")
+        } else {
+          #catdb(c("file.rn"))
+          miswarn <- T
+        }
+      } else {
+        #print("gere")
+      }
+    } else {
+      if(frm$match) {
+        miswarn <- T
+      } else {
+        #print("hereg")
+      }
+    }
+  }
+  if(miswarn) {
+    ofn <- cat.path(dir$ano,pref=pref,"_file_rowname_list_check_this.txt")
+    if(exists("file.rn")) { 
+      warning("rownames didn't match what was in filecheck the list in the file at:\n ",ofn) 
       writeLines(paste(file.rn),con=ofn) ; cat("\n file preview:\n"); print(head(file.rn,10)); cat("\n")
+    } else {
+      warning(paste("rownames didn't match what was in file"))
     }
   }
   cat("\n")
