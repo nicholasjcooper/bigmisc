@@ -339,10 +339,11 @@ pca.scree.plot <- function(eigenv,elbow=NA,printvar=T,min.dim=NA,M=NULL,add.fit.
 
 ### add to NCmisc
 ## equivalent to base:::substitute but can do any length of arguments
+# won't work if variable is NULL
 Substitute <- function(x=NULL,...) {
   varlist <- list(...); out <- character(1)
   if(length(varlist)>0) { 
-    extr <- var.to.char(...)
+    extr <- Substitute(...)
   } else {
     extr <- NULL
   }
@@ -1092,7 +1093,7 @@ check.text.matrix.format <- function(fn,ncol=NA,header=NULL,row.names=NULL,sep="
   } else {
    # catdb(c("frst","ncol"))
     if (frst!=ncol & frst!=ncol+1) {
-      cat.db(c("frst","ncol"))
+      #cat.db(c("frst","ncol"))
       stop("dimensions of import file do not match id lists specified, exiting")
       break; break; 
     } else {
@@ -1155,69 +1156,278 @@ check.text.matrix.format <- function(fn,ncol=NA,header=NULL,row.names=NULL,sep="
 }
 
 
-# 
-# 
-# 
-# 
-# import.big.data <- function(fn,dir,rownames,colnames) {
-#   
-# }
-# 
-# 
-# #?  bafmode <- F # assume in LRR mode unless otherwise indicated by 'pref'
-# if(length(grep("BAF",toupper(pref)))>0) {
-#   ## note these must match initial bash script that extracts data!
-#   dat.file.suf <- "BAF.dat"; bafmode <- T
-# } else {
-#   dat.file.suf <- "LRR.dat"
-# }
-# if(all(is.null(input.fn))) {
-#   ## try to automatically detect datafiles if not specified
-#   if(is.data.tracker(DT)) {
-#     if(!bafmode) { input.fn <- getSlot(DT,"shape.lrr",grps=grp) 
-#     } else { input.fn <- getSlot(DT,"shape.baf",grps=grp) }
-#     if(is.list(input.fn)) { input.fn <- unlist(input.fn,recursive=F) } #cat("CHECK: removed 1 level of list\n") }
-# } else {
-#   if(!bafmode) { input.fn <- get.lrr.files(dir,grp,suffix=dat.file.suf)    
-#   } else { input.fn <- get.lrr.files(dir,grp,suffix=dat.file.suf,baf=T) }
-# }
-# if(!all(!is.null(cols.fn))) {
-#   if(is.data.tracker(DT)) {
-#     ## GET column names using data.tracker object 'DT'
-#     if(all(!is.na(grp))) {
-#       if(verbose) { cat(" getting ID list(s) for group",grp,"\n") }
-#       # return file lists, listed by 'group'; separate lists for each file despite grp
-#       ID.list <- unlist(getSlot(DT,"sub.cols",grps=grp,ret.obj=T),recursive=F)
-#     } else {
-#       ng <- getSlot(DT,"ngrps")
-#       if(length(input.fn)==1 & ng==1) {
-#         # all column namess in 1 set
-#         if(verbose) { cat(" 1 input file and 1 column names set only, getting IDs\n") }
-#         ID.list <- list(unlist(getSlot(DT,"column namess",ret.obj=T))) 
-#       } else {
-#         # separate list for each file listed by group sets
-#         if(verbose) { cat(" getting all ID lists ignoring group [",ng," groups]\n",sep="") }
-#         ID.list <- unlist(getSlot(DT,"sub.cols",ret.obj=T),recursive=F) 
-#       }
-#     }
-#   } else {
-#     ## GET column namess using 'file.spec.txt' # deprecated
-#     stop("if we need this code back, go to before march 19\n")
-#   }  
-# }
-#   if(is.data.tracker(DT)) {
-#     rows.fn <- getSlot(DT,"rows")
-#   } else {
-#     rows.fn <- find.file(rows.fn,dir$ano,dir)  # row annotation file name
-#   }
-#   
-#   if(!bafmode) {  
-#     ifn <- cat.path(dir$col,input.fn,must.exist=T)
-#   } else {  
-#     ifn <- cat.path(dir$baf.col,input.fn,must.exist=T)  
-#   }
-#   
+
+dat.to.big.matrix <- function(dir, grp=NA, snp.fn="snpNames.txt", sample.fn=NULL, 
+                              input.fn=NULL, pref="LRR", delete.existing=T,
+                              ret.obj=F,DT=NULL,verbose=T)
+{
+  # import from a text (hopefully long format) datafile to a big.matrix
+  # return bigmatrix description 'object' or name of description file according to 'ret.obj'
+  ### CALIBRATE OPTIONS AND PERFORM CHECKS ###
+  max.mem <- 4096 # stupidly large
+  bafmode <- F # assume in LRR mode unless otherwise indicated by 'pref'
+  if(length(grep("BAF",toupper(pref)))>0) {
+    ## note these must match initial bash script that extracts data!
+    dat.file.suf <- "BAF.dat"; bafmode <- T
+  } else {
+    dat.file.suf <- "LRR.dat"
+  }
+  ## Define data types for big.matrix
+  dat.type <- double(1)
+  dat.typeL <- "double"  # label
+  dir <- validate.dir.for(dir,c("ano","big","col"),warn=F)
+  #### GET THE SHAPED INPUT FILE NAME(S) ####
+  if(all(is.null(input.fn))) {
+    ## try to automatically detect datafiles if not specified
+    if(is.data.tracker(DT)) {
+      if(!bafmode) { input.fn <- getSlot(DT,"shape.lrr",grps=grp) 
+      } else { input.fn <- getSlot(DT,"shape.baf",grps=grp) }
+      if(is.list(input.fn)) { input.fn <- unlist(input.fn,recursive=F) } #cat("CHECK: removed 1 level of list\n") 
+    } else {
+      if(!bafmode) { input.fn <- get.lrr.files(dir,grp,suffix=dat.file.suf)    
+      } else { input.fn <- get.lrr.files(dir,grp,suffix=dat.file.suf,baf=T) }
+    }
+  }
+  # print(input.fn)
+  #### GET THE CORRESPONDING SAMPLE LIST(S) ####
+  if(all(!is.null(sample.fn))) {
+    sample.fn <- find.file(sample.fn,dir$ids)  # sample id file name
+    cat("Reading sample and snp lists from text files...\n")
+    cat(paste(" samples entered manually, reading samples from",sample.fn,"\n"))
+    ID.list <- lapply(sample.fn,readLines)  #readLines(sample.fn)
+  } else {
+    if(is.data.tracker(DT)) {
+      ## GET samples using data.tracker object 'DT'
+      if(all(!is.na(grp))) {
+        if(verbose) { cat(" getting ID list(s) for group",grp,"\n") }
+        # return file lists, listed by 'group'; separate lists for each file despite grp
+        ID.list <- unlist(getSlot(DT,"sub.samples",grps=grp,ret.obj=T),recursive=F)
+      } else {
+        ng <- getSlot(DT,"ngrps")
+        if(length(input.fn)==1 & ng==1) {
+          # all samples in 1 set
+          if(verbose) { cat(" 1 input file and 1 sample set only, getting IDs\n") }
+          ID.list <- list(unlist(getSlot(DT,"samples",ret.obj=T))) 
+        } else {
+          # separate list for each file listed by group sets
+          if(verbose) { cat(" getting all ID lists ignoring group [",ng," groups]\n",sep="") }
+          ID.list <- unlist(getSlot(DT,"sub.samples",ret.obj=T),recursive=F) 
+        }
+      }
+    } else {
+      ## GET samples using 'file.spec.txt' # deprecated
+      stop("if we need this code back, go to before march 19\n")
+    }
+  }
+  ##print(headl(ID.list))
+  cmb.ID.list <- paste(do.call("c",ID.list))
+  ##print(length(ID.list[[1]]))
+  numfls <- length(ID.list)
+  ### GET THE ORDERED SNP LIST ###
+  if(is.data.tracker(DT)) {
+    snp.fn <- getSlot(DT,"snps")
+  } else {
+    snp.fn <- find.file(snp.fn,dir$ano,dir)  # snp annotation file name
+  }
+  #print(head(cmb.ID.list))
+  cat(paste(" reading snps from",snp.fn,"\n"))
+  snp.list <- readLines(snp.fn) ##; print(head(snp.list))
+  ## Multiple possible input situations: 
+  ##   FOR LRR: unlist all input files and subsamples for selected grp
+  ##    n groups in study, 1 file each: should have input.fn length 1, id.list length 1
+  ##    n groups in study, m_n files each: should have input.fn length m_n, id.list length m_n
+  ##   FOR BAF: unlist all input files and subsamples for all grps
+  ##    n groups in study, 1 file each: should have input.fn length n, id.list length n
+  ##    n groups in study, m_n files each: should have input.fn length sum_i(m_n=i), id.list length sum_i(m_n=i)
+  ## DEBUG print(length(input.fn)); print(numfls); print(input.fn)
+  if(length(input.fn)>1) {
+    if(length(input.fn)==numfls) {
+      if(verbose) {
+        warning(paste("reading a single cohort from",numfls,"source files. Edit file.spec.txt if this is unexpected"))
+      }
+    } else {
+      stop("Error: when reading a single cohort from multiple source files, need same number of id files")
+    }
+  } else { if(numfls!=1) { warning(paste("length of ID list was",numfls,"but only 1 input file")) } } 
+  #### DETERMINE FILE DIMENSIONS ####
+  num.sub <- length(cmb.ID.list) #ID.list)
+  smp.szs <- sapply(ID.list,length)
+  fil.ofs <- c(0,cumsum(smp.szs)) #note last element is the end of the last file
+  num.snp <- length(snp.list)
+  cat(paste(" found",num.sub,"samples and",num.snp,"markers\n"))
+
+  # use 'pref' as the name of the big.matrix backing files for this cohort
+  bck.fn <- paste(pref,"bckfile",sep="")
+  des.fn <- paste(pref,"descrFile",sep="")
+  import.big.data(input.fn=input.fn, dir=dir, grp=grp,
+      row.names=snp.list, col.names=ID.list, 
+      dat.file.suf=dat.file.suf, pref=pref, delete.existing=delete.existing, 
+      ret.obj=ret.obj, verbose=verbose, 
+     dat.type=dat.type, dat.typeL=dat.typeL, ram.gb=2, hd.gb=max.mem)
+
+  if(ret.obj) {
+    return(describe(bigVar))
+  } else {
+    return(des.fn)
+  } 
+  cat("...complete!\n")
+
+}
+
+# patch some reader functions that cause trouble for long format files :(
+# fix problem in reader:::get.delim :(
+get.delim <- function(...,delims=c("\t"," ","\t| +",";",",")) {
+  return(reader:::get.delim(...,delims=delims))
+}
+# fix problem in reader:::file.ncol :(
+file.ncol <- function(fn,...) { reader:::file.ncol(fn,del=get.delim(fn),...) }
+
+
   
+top <- function() {
+  if(!check.linux.install("top")) {
+    warning("'top' command only works on Mac OS X and linux")
+    return(NULL)
+  }
+  if(toupper(Sys.info()["sysname"])=="DARWIN") { macos <- T } else { macos <- F }
+  if(macos) {
+    # MAC OS X
+    txt <- tryCatch(system("top -l 1 -n 1",intern=T), error = function(e) e)
+    if(length(txt)==0) { warning("command failed"); return(NULL) }
+    dtt <- divide.top.txt(txt)
+    parz <- dtt$table; headr <- dtt$header
+    ram.gb.list <- suck.mem(headr,key="physmem")
+    cpu.pc.list <- suck.cpu(headr)
+    return()
+  }
+  if(!macos) {
+    ## LINUX
+    txt <- tryCatch(system("top -n 1 -b",intern=T), error = function(e) e)
+    if(length(txt)==0) { warning("command failed"); return(NULL) }
+    dtt <- divide.top.txt(txt)
+    parz <- dtt$table; headr <- dtt$header
+    ram.gb.list <- suck.mem(headr)
+    cpu.pc.list <- suck.cpu(headr)
+  }
+  tab <- make.top.tab(parz)
+  mem.col <- grep("mem",colnames(tab),ignore.case=T)[1]
+  if(is.na(mem.col)) { mem.col <- grep("RSIZE",colnames(tab),ignore.case=T)[1] }
+  cpu.col <- grep("cpu",colnames(tab),ignore.case=T)[1]
+  tab <- tab[rev(order(tab[,mem.col])),]
+  tab <- tab[rev(order(tab[,cpu.col])),];     tab <- tab[rev(order(tab[,mem.col])),]
+  return(list(CPU=cpu.pc.list,RAM=ram.gb.list,Table=tab))
+}
+
+
+make.top.tab <- function(parz) {
+  cnts <- sapply(parz,length)
+  exp.lines <- Mode(cnts)
+  shortz <- which(cnts<exp.lines)
+  longz <- which(cnts>exp.lines)
+  parz[longz] <- lapply(parz[longz],function(X) { X[1:exp.lines] })
+  if(length(shortz)>0) { parz <- parz[-shortz] }
+  df <- as.data.frame(matrix(ncol=length(parz[[1]]),nrow=length(parz)))
+  for(cc in 1:length(parz[[1]])) { df[,cc] <- sapply(parz,"[",cc) }
+  tab <- df[-1,]; colnames(tab) <- df[1,]; rownames(tab) <- NULL
+  return(tab)
+}
+
+divide.top.txt <- function(txt) {
+  parz <- strsplit(txt," +|\t")
+  parz <- lapply(parz,function(X) { X <- X[!is.na(X)] ; X[X!=""] } ) 
+  headline <- which(sapply(parz,function(X) { all(c("PID","USER") %in% toupper(X)) }))
+  parz <- parz[headline:length(parz)]
+  headr <- txt[1:(headline-1)]
+  return(list(header=headr,table=parz))
+}
+
+suck.num.from.txt <- function(txt) {
+  splt <- strsplit(txt,"")
+  nmall <- numeric()
+  anm <- function(X) { suppressWarnings(as.numeric(X)) }
+  for(cc in 1:length(splt)) {
+    nm <- sapply(splt[[cc]],function(X) {
+      if(!is.na(anm(X))) { anm(X) } else { if(X==".") { X } else { NA } } } )
+    nmall[cc] <- anm(paste(narm(nm),collapse="",sep=""))
+  }
+  return(nmall)
+}
+
+suck.cpu <- function(headr,key="cpu") {
+  cpz <- grep(key,headr,ignore.case=T)
+  if(length(cpz)>0) {
+    cpuline <- headr[cpz[1]]
+    ms <- strsplit(cpuline,",")[[1]]
+    ms <- gsub("cpu","",ms,ignore.case=T)
+    user <- ms[grep("us",ms,ignore.case=T)]
+    sys <- ms[grep("sy",ms,ignore.case=T)]
+    idle <- ms[grep("id",ms,ignore.case=T)]
+    if(length(user)>0) {
+      user1 <- rmv.spc(gsub("us","",gsub("user","",user,ignore.case=T)))
+      user.gb <- suck.num.from.txt(user1)
+    } else { user.gb <- NA }
+    if(length(sys)>0) {
+      sys1 <- rmv.spc(gsub("sy","",gsub("sys","",sys,ignore.case=T)))
+      sys.gb <- suck.num.from.txt(sys1)
+    } else { sys.gb <- NA }
+    if(length(idle)>0) {
+      idle1 <- rmv.spc(gsub("id","",gsub("idle","",idle,ignore.case=T)))
+      idle.gb <- suck.num.from.txt(idle1)
+    } else { idle.gb <- NA }
+    if(is.na(idle.gb) & !is.na(sys.gb) & !is.na(user.gb)) { idle.gb <- 100-user.gb-sys.gb }
+    if(is.na(sys.gb) & !is.na(idle.gb) & !is.na(user.gb)) { sys.gb <- 100-user.gb-idle.gb }
+    if(is.na(user.gb) & !is.na(sys.gb) & !is.na(idle.gb)) { user.gb <- 100-idle.gb-sys.gb }
+  } else { 
+    cat("no CPU usage information found\n")
+    return(NULL)
+  }
+  return(list(total=user.gb,idle=idle.gb,sys=sys.gb,unit="%"))
+}
+  
+  
+suck.mem <- function(headr,key="Mem") {
+  memz <- grep(key,headr,ignore.case=T)
+  if(length(memz)>0) {
+    memline <- headr[memz[1]]
+    ms <- strsplit(memline,",")[[1]]
+    ms <- gsub("mem","",ms,ignore.case=T)
+    tot <- ms[grep("total",ms,ignore.case=T)]
+    free <- ms[grep("free",ms,ignore.case=T)]
+    used <- ms[grep("used",ms,ignore.case=T)]
+    if(length(tot)>0) {
+      tot1 <- rmv.spc(gsub("total","",tot,ignore.case=T))
+      tot.gb <- suck.bytes(tot1)
+    } else { tot.gb <- NA }
+    if(length(free)>0) {
+      free1 <- rmv.spc(gsub("free","",free,ignore.case=T))
+      free.gb <- suck.bytes(free1)
+    } else { free.gb <- NA }
+    if(length(used)>0) {
+      used1 <- rmv.spc(gsub("used","",used,ignore.case=T))
+      used.gb <- suck.bytes(used1)
+    } else { used.gb <- NA }
+    if(is.na(used.gb) & !is.na(free.gb) & !is.na(tot.gb)) { used.gb <- tot.gb-free.gb }
+    if(is.na(free.gb) & !is.na(used.gb) & !is.na(tot.gb)) { free.gb <- tot.gb-used.gb }
+    if(is.na(tot.gb) & !is.na(free.gb) & !is.na(used.gb)) { tot.gb <- used.gb+free.gb }
+  } else { 
+    cat("no RAM usage information found\n")
+    return(NULL)
+  }
+  return(list(total=tot.gb,used=used.gb,free=free.gb,unit="Gb"))
+}
+  
+suck.bytes <- function(tot1,GB=T) {
+  if(length(grep("k",tot1,ignore.case=T))>0) { mult <- 1000 }
+  if(length(grep("m",tot1,ignore.case=T))>0) { mult <- 10^6 }
+  if(length(grep("g",tot1,ignore.case=T))>0) { mult <- 10^9 }
+  lst <- c("kb","gb","mb","b","g","m","k")
+  tot1 <- suck.num.from.txt(tot1)
+  tot2 <- (as.numeric(tot1)*mult)/10^9 ; 
+  if(!GB) { tot2 <- tot2/10^3 }
+  return(tot2)
+}
+
+
   
 ## bit of a mess  - give it a  goo!!
   
@@ -1233,10 +1443,12 @@ rox.args <- function(txt) {
 
 #' Load a text file into a big.matrix object
 #'
-#' This provides a faster, although slightly less flexible way to import text data
-#' into a big.matrix object than bigmemory:::read.big.matrix(). Also will
-#' import R binary files containing a matrix into a big.matrix object. The text
-#' method is most important as it allows import of a matrix size exceeding RAM limits.
+#' This provides a faster way to import text data
+#' into a big.matrix object than bigmemory:::read.big.matrix(). The
+#' method allows import of a data matrix with size exceeding RAM limits.
+#' Can import from a matrix delimited file with or without row/column names,
+#' or from a long format dataset with no row/columns names (these should be
+#' specified as separate lists).
 #' @param input.fn
 #' @param dir
 #' @param grp
@@ -1256,17 +1468,17 @@ rox.args <- function(txt) {
 #' @export
 #' @examples
 #' library(bigmemory); 
-#' # set up a toy example of a big.matrix 
-#' bM <- filebacked.big.matrix(20, 50,
-#'        dimnames = list(paste("r",1:20,sep=""), paste("c",1:50,sep="")),
-#'        backingfile = "test.bck",  backingpath = getwd(), descriptorfile = "test.dsc")
-#' bM[1:20,] <- replicate(50,rnorm(20))
-#' to test relative speed for larger matrices
-#' # Now have a big matrix which can be retrieved using this function in 4 ways:
-#' d.bM <- describe(bM)
-#' save(d.bM,file="fn.RData")
+#' # all file names to use in this example #
+#' all.fn <- c("rownames.txt","colnames.txt","functestdn.txt","funclongcol.txt","functest.txt",
+#'  paste("rn",1:3,".txt",sep=""),paste("cn",1:3,".txt",sep=""),
+#'  paste("split",1:3,".txt",sep=""),
+#'  paste("splitmatCd",1:3,".txt",sep=""),paste("splitmatRd",1:3,".txt",sep=""),
+#'  paste("splitmatC",1:3,".txt",sep=""), paste("splitmatR",1:3,".txt",sep=""))
+#' any.already <- file.exists(all.fn)
+#' if(any(any.already)) { 
+#'  warning("files already exist in the working directory with the same names as some example files") }
 #' # SETUP a test matrix 
-#' test.size <- 6 # try increasing this number for larger matrices
+#' test.size <- 4 # try increasing this number for larger matrices
 #' M <- matrix(runif(10^test.size),ncol=10^(test.size-2)) # normal matrix
 #' write.table(M,sep="\t",col.names=F,row.names=F,file="functest.txt",quote=F) # no dimnames
 #' rown <- paste("rs",sample(10:99,nrow(M),replace=T),sample(10000:99999,nrow(M)),sep="")
@@ -1276,82 +1488,65 @@ rox.args <- function(txt) {
 #' write.table(Mdn,sep="\t",col.names=T,row.names=T,file="functestdn.txt",quote=F) # with dimnames
 #' print.large(Mdn)
 #' writeLines(paste(as.vector(M)),con="funclongcol.txt")
-#' writeLines(paste(as.vector(t(M))),con="funclongrow.txt")
 #' in.fn <- "functest.txt"
 #' ### IMPORTING SIMPLE 1 FILE MATRIX ##
 #' writeLines(rown,r.fn); writeLines(coln,c.fn)
 #' #1. import without specifying row/column names
 #' ii <- import.big.data(in.fn); print.big.matrix(ii) # SLOWER without dimnames!
 #' #2. import using row/col names from file
-#' ii <- import.big.data(in.fn,
-#'  cols.fn="colnames.txt",rows.fn="rownames.txt"); print.big.matrix(ii)
+#' ii <- import.big.data(in.fn,cols.fn="colnames.txt",rows.fn="rownames.txt")
+#' print.big.matrix(ii)
 #' #3. import by passing colnames/rownames as objects
-#' ii <- import.big.data(in.fn,
-#'  col.names=coln,row.names=rown); print.big.matrix(ii)
+#' ii <- import.big.data(in.fn, col.names=coln,row.names=rown)
+#' print.big.matrix(ii)
 #' ### IMPORTING SIMPLE 1 FILE MATRIX ALREADY WITH DIMNAMES ##
-#  # run tests 1-3 with: # in.fn <- "functestdn.txt"
-#' ### IMPORTING SIMPLE 1 FILE MATRIX ALREADY WITH MISORDERED col DIMNAMES ##
-#' coln2 <- coln; coln <- sample(coln)
-#' # re-run test3 using in.fn with dimnames # should fail with ERROR
-#' # restore using:  coln <- coln2
-#' ### IMPORTING SIMPLE 1 FILE MATRIX ALREADY WITH MISORDERED row DIMNAMES ##
+#' #1. import without specifying row/column names, but they ARE in the file
+#' in.fn <- "functestdn.txt"
+#' ii <- import.big.data(in.fn); print.big.matrix(ii)
+#' ### IMPORTING SIMPLE 1 FILE MATRIX ALREADY WITH MISORDERED rownames ##
 #' rown2 <- rown; rown <- sample(rown);
 #' # re-run test3 using in.fn with dimnames
-#' # restore using: rown <- rown2
-#' ### IMPORTING SIMPLE 1 FILE LONG by cols ##
-#' in.fn <- "funclongcol.txt"; #rerun 1:3 # nb: 1 should fail!
-#' ### IMPORTING SIMPLE 1 FILE LONG by rows ##
-#' #in.fn <- "funclongrow.txt" - although there is no such supported behaviour!
-#' ### IMPORTING multifile LONG by rows ##
-#' splF <- factor(rep(c(1,2,3),nrow(M)*c(.1,.5,.4)))
-#' rownL <- split(rown,splF)
-#' Ms <- split(M,splF); Ms <- lapply(Ms,function(X) { dim(X) <- c(length(X)/ncol(M),ncol(M)); X } )
-#' rowfs <- paste("rn",1:length(rownL),".txt",sep="")
-#' infs <- paste("split",1:length(rownL),".txt",sep="")
-#' for(cc in 1:length(rownL)) { writeLines(rownL[[cc]],con=rowfs[cc]) }
-#' for(cc in 1:length(infs)) { writeLines(paste(as.vector((Ms[[cc]]))),con=infs[cc]) }
-#' # [A] read in using three separate files split by rowname groups 
-#' ii <- import.big.data(infs,
-#'  cols.fn="colnames.txt",rows.fn=rowfs); print.big.matrix(ii)
-#' ii <- import.big.data(infs,
-#'  col.names=coln,row.names=rownL); print.big.matrix(ii)
+#' ii <- import.big.data(in.fn, col.names=coln,row.names=rown)
+#' print.big.matrix(ii)
+#' # restore rownames: 
+#' rown <- rown2
+#' ### IMPORTING SIMPLE 1 FILE LONG FORMAT by columns ##
+#' in.fn <- "funclongcol.txt"; #rerun test 2 # 
+#' ii <- import.big.data(in.fn,cols.fn="colnames.txt",rows.fn="rownames.txt")
+#' print.big.matrix(ii)
 #' ### IMPORTING multifile LONG by cols ##
-#' splF <- factor(rep(c(1,2,3),ncol(M)*c(.1,.5,.4)))
+#' splF <- factor(rep(c(1:3),ncol(M)*c(.1,.5,.4)))
 #' colnL <- split(coln,splF); MM <- as.data.frame(t(M))
-#' Ms2 <- split(MM,splF); Ms2 <- lapply(Ms2,function(X) { X <- t(X); dim(X) <- c(nrow(M),length(X)/nrow(M)); X } )
-#' #lapply(Ms2,print.large)
+#' Ms2 <- split(MM,splF)
+#' Ms2 <- lapply(Ms2,
+#'    function(X) { X <- t(X); dim(X) <- c(nrow(M),length(X)/nrow(M)); X } )
+#' # preview Ms2 - not run # lapply(Ms2,print.large)
 #' colfs <- paste("cn",1:length(colnL),".txt",sep="")
 #' infs <- paste("split",1:length(colnL),".txt",sep="")
+#' # create multiple column name files and input files
 #' for(cc in 1:length(colnL)) { writeLines(colnL[[cc]],con=colfs[cc]) }
-#' for(cc in 1:length(infs)) { writeLines(paste(as.vector((Ms2[[cc]]))),con=infs[cc]) }
-#' # [B] read in using three separate files split by rowname groups
-#' ii <- import.big.data(infs,
-#'  cols.fn=colfs,rows.fn="rownames.txt"); print.big.matrix(ii)
-#' ii <- import.big.data(infs,
-#'  col.names=colnL,row.names=rown); print.big.matrix(ii)
+#' for(cc in 1:length(infs)) { 
+#'   writeLines(paste(as.vector((Ms2[[cc]]))),con=infs[cc]) }
+#' # test using colnames and rownames lists
+#' ii <- import.big.data(infs, col.names=colnL,row.names=rown)
+#' print.big.matrix(ii)
 #' ### IMPORTING multifile MATRIX by rows ##
+#' splF <- factor(rep(c(1,2,3),nrow(M)*c(.1,.5,.4)))
+#' rownL <- split(rown,splF)
+#' Ms <- split(M,splF)
+#' Ms <- lapply(Ms,function(X) { dim(X) <- c(length(X)/ncol(M),ncol(M)); X } )
+#' # preview Ms - not run # lapply(Ms,print.large)
+#' # create multiple row name files and input files
+#' rowfs <- paste("rn",1:length(rownL),".txt",sep="")
+#' for(cc in 1:length(rownL)) { writeLines(rownL[[cc]],con=rowfs[cc]) }
 #' infs <- paste("splitmatR",1:length(colnL),".txt",sep="")
-#' for(cc in 1:length(infs)) { write.table(Ms[[cc]],sep="\t",col.names=F,row.names=F,file=infs[cc],quote=F) }
-#' # test using A
-#' ### IMPORTING multifile MATRIX by cols ##
-#' infs <- paste("splitmatC",1:length(colnL),".txt",sep="")
-#' for(cc in 1:length(infs)) { write.table(Ms2[[cc]],sep="\t",col.names=F,row.names=F,file=infs[cc],quote=F) }
-#' # test using B
-#' ### IMPORTING multifile MATRIX by rows with dimnames ##
-#' dMs <- Ms; dMs2 <- Ms2; 
-#' for (cc in 1:length(colnL)) {
-#'  rownames(Ms[[cc]]) <- rownL[[cc]]; colnames(Ms[[cc]]) <- coln
-#'  rownames(Ms2[[cc]]) <- rown; colnames(Ms2[[cc]]) <- colnL[[cc]]
-#' }
-#' infs <- paste("splitmatRd",1:length(colnL),".txt",sep="")
-#' for(cc in 1:length(infs)) { write.table(Ms[[cc]],sep="\t",file=infs[cc],quote=F) }
-#' # test using A
-#' ### IMPORTING multifile MATRIX by cols with dimnames ##
-#' infs <- paste("splitmatCd",1:length(colnL),".txt",sep="")
-#' for(cc in 1:length(infs)) { write.table(Ms2[[cc]],sep="\t",file=infs[cc],quote=F) }
-#' # test using B
-#' # restore matrices: Ms <- dMs; Ms2 <- dMs2
-#' ## ALLL TESTS PASSED!! ##
+#' for(cc in 1:length(infs)) { 
+#'  write.table(Ms[[cc]],sep="\t",col.names=F,row.names=F,file=infs[cc],quote=F) }
+#' # test using colnames and rownames files
+#' ii <- import.big.data(infs, col.names="colnames.txt",rows.fn=rowfs)
+#' print.big.matrix(ii)
+#' # DELETE ALL FILES ##
+#' unlink(all.fn[!any.already]) # only delete files not initially present (prevent deleting user's files)
 import.big.data <- function(input.fn=NULL, dir=getwd(), grp=NA, long=F, rows.fn=NULL, cols.fn=NULL, dat.file.suf=".dat",
                               pref="", delete.existing=T, ret.obj=F, verbose=T, row.names=NULL, col.names=NULL,
                               dat.type=double(1), dat.typeL="double", ram.gb=2, hd.gb=1000)
@@ -1360,9 +1555,18 @@ import.big.data <- function(input.fn=NULL, dir=getwd(), grp=NA, long=F, rows.fn=
   # return bigmatrix description 'object' or name of description file according to 'ret.obj'
   ### CALIBRATE OPTIONS AND PERFORM CHECKS ###
   dir.force.slash <- reader:::dir.force.slash # use internal function from 'reader'
+  if(all(dir=="")) { dir <- getwd() }
+  ## for compatibility with plumbCNV directory object
+  if(exists("validate.dir.for",mode="function")) {
+    ## plumbCNV specific code ##
+    dir <- do.call("validate.dir.for",list(dir=dir,elements=c("big","ano","col"),warn=F))  
+  } else {
+    # otherwise
+    dir <- list(big=dir,ano=dir,col=dir)
+    if(is.list(dir)) { if(!is.null(dir[["big"]])) { dir.big <- dir$big } }
+  }
   ## Define data types for big.matrix
     # label
-  dir <- validate.dir.for(dir,c("ano","big","col"),warn=F)
   input.fn <- cat.path(dir$col,input.fn)
   file.rn <- character()
   spec.rn <- spec.cn <- T; miswarn <- F
@@ -1452,15 +1656,7 @@ import.big.data <- function(input.fn=NULL, dir=getwd(), grp=NA, long=F, rows.fn=
       multi.mode <- F; col.mode <- T
     }
   }
-  #print(head(cmb.ID.list))
-  ## Multiple possible input situations: 
-  ##   FOR LRR: unlist all input files and subcols for selected grp
-  ##    n groups in study, 1 file each: should have input.fn length 1, id.list length 1
-  ##    n groups in study, m_n files each: should have input.fn length m_n, id.list length m_n
-  ##   FOR BAF: unlist all input files and subcols for all grps
-  ##    n groups in study, 1 file each: should have input.fn length n, id.list length n
-  ##    n groups in study, m_n files each: should have input.fn length sum_i(m_n=i), id.list length sum_i(m_n=i)
-  ## DEBUG print(length(input.fn)); print(numfls); print(input.fn)
+  # determine what set of input files have been specified
   if(length(input.fn)>1) {
     if(length(input.fn)==numfls) {
       if(verbose) {
@@ -1529,14 +1725,14 @@ import.big.data <- function(input.fn=NULL, dir=getwd(), grp=NA, long=F, rows.fn=
     if(col.mode) { ffc <- ff; ffr <- 1 } else { ffc <- 1; ffr <- ff }
     # previously: create file name depending on whether in baf or lrr directory
     #test file type if matrix
-    cat.db(c("ff","numfls","ifn","col.mode","ffr","ffc"))
+    #cat.db(c("ff","numfls","ifn","col.mode","ffr","ffc"))
     if(long) { input.is.vec <- T } else {
       if(file.ncol(ifn)>1) { input.is.vec <- F } else { input.is.vec <- T }
     }
     nxt.rng <- (fil.ofs[ff]+1):(fil.ofs[ff+1])
-    cat.db("nxt.rng")
+    #cat.db("nxt.rng")
     if(col.mode) { cls1 <- length(nxt.rng); rws1 <- rws } else { cls1 <- cls; rws1 <- length(nxt.rng) }
-    cat.db(c("cls1","rws1","cls","rws"))
+    #cat.db(c("cls1","rws1","cls","rws"))
     if(!input.is.vec) {
       if(spec.rn & spec.cn) {
         frm <- check.text.matrix.format(fn=ifn,ncol=cls1,header=ID.list[[ffc]],row.names=rows.list[[ffr]])
