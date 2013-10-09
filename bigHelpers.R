@@ -1000,50 +1000,6 @@ getBigMat <- function(fn,dir="",verbose=F)
 
 
 
-#plumb cnv internal function
-load.data.to.bigmat <- function(dat.fn,inputType="TXT",bck,des,dir,Hopt=F,RNopt=T)
-{
-  # get data stored in a text or binary file and get it into a bigmatrix object format
-  dir <- validate.dir.for(dir,c("ano","big"),warn=F)
-  if(inputType=="RDATA")
-  {
-    # attach datafile bigmemory object
-    cat("\nLoading RData file...")
-    this.mat <- load(dat.fn)
-    if (this.mat!="m.by.s.matrix") { 
-      m.by.s.matrix <- get(this.mat)
-      rm(this.mat) 
-    }
-    cat("complete\n")
-    if(is.null(colnames(m.by.s.matrix)))
-    {
-      snp.fn <- cat.path(dir$ano,"snpNames.txt")
-      snp.list <- readLines(snp.fn)
-      if (ncol(m.by.s.matrix)==length(snp.list))
-      {
-        colnames(m.by.s.matrix) <- snp.list
-        cat(paste("*warning: added column names to matrix from",snp.fn,"\n"))
-        cat("if replacement with these names is undesired please check/modify the .R source code\n")
-      } else {
-        cat("Error: matrix has no column names and default file doesn't\n")
-        cat("match number of columns, please check/modify the .R source code\n")
-        stop()
-      }
-    }
-    cat(" saving datafile as big matrix\n")
-    bigMat <- as.big.matrix(m.by.s.matrix, backingfile=bck,
-                            backingpath=dir$big, descriptorfile=des)
-  } else {
-    # assume inputType=="TXT"
-    cat("\nLoading TAB file...(this will probably be slow)...")
-    read.big.matrix(dat.fn, sep = '\t', header = Hopt,
-                    has.row.names=RNopt, ignore.row.names=FALSE,
-                    backingfile = bck, backingpath = dir$big,
-                    descriptorfile = des, extraCols = NULL)
-    cat("complete\n")
-  }
-}
-
 
 # internal? function to quickly extract whether a delimited matrix
 # has row or column names, and what the column names are
@@ -1066,6 +1022,7 @@ quick.mat.format <- function(fn) {
 }
 
 
+## internal function for import.big.matrix
 check.text.matrix.format <- function(fn,ncol=NA,header=NULL,row.names=NULL,sep="\t") 
 {
   # read the first two lines of a text matrix file and determine
@@ -1157,123 +1114,6 @@ check.text.matrix.format <- function(fn,ncol=NA,header=NULL,row.names=NULL,sep="
 
 
 
-dat.to.big.matrix <- function(dir, grp=NA, snp.fn="snpNames.txt", sample.fn=NULL, 
-                              input.fn=NULL, pref="LRR", delete.existing=T,
-                              ret.obj=F,DT=NULL,verbose=T)
-{
-  # import from a text (hopefully long format) datafile to a big.matrix
-  # return bigmatrix description 'object' or name of description file according to 'ret.obj'
-  ### CALIBRATE OPTIONS AND PERFORM CHECKS ###
-  max.mem <- 4096 # stupidly large
-  bafmode <- F # assume in LRR mode unless otherwise indicated by 'pref'
-  if(length(grep("BAF",toupper(pref)))>0) {
-    ## note these must match initial bash script that extracts data!
-    dat.file.suf <- "BAF.dat"; bafmode <- T
-  } else {
-    dat.file.suf <- "LRR.dat"
-  }
-  ## Define data types for big.matrix
-  dat.type <- double(1)
-  dat.typeL <- "double"  # label
-  dir <- validate.dir.for(dir,c("ano","big","col"),warn=F)
-  #### GET THE SHAPED INPUT FILE NAME(S) ####
-  if(all(is.null(input.fn))) {
-    ## try to automatically detect datafiles if not specified
-    if(is.data.tracker(DT)) {
-      if(!bafmode) { input.fn <- getSlot(DT,"shape.lrr",grps=grp) 
-      } else { input.fn <- getSlot(DT,"shape.baf",grps=grp) }
-      if(is.list(input.fn)) { input.fn <- unlist(input.fn,recursive=F) } #cat("CHECK: removed 1 level of list\n") 
-    } else {
-      if(!bafmode) { input.fn <- get.lrr.files(dir,grp,suffix=dat.file.suf)    
-      } else { input.fn <- get.lrr.files(dir,grp,suffix=dat.file.suf,baf=T) }
-    }
-  }
-  # print(input.fn)
-  #### GET THE CORRESPONDING SAMPLE LIST(S) ####
-  if(all(!is.null(sample.fn))) {
-    sample.fn <- find.file(sample.fn,dir$ids)  # sample id file name
-    cat("Reading sample and snp lists from text files...\n")
-    cat(paste(" samples entered manually, reading samples from",sample.fn,"\n"))
-    ID.list <- lapply(sample.fn,readLines)  #readLines(sample.fn)
-  } else {
-    if(is.data.tracker(DT)) {
-      ## GET samples using data.tracker object 'DT'
-      if(all(!is.na(grp))) {
-        if(verbose) { cat(" getting ID list(s) for group",grp,"\n") }
-        # return file lists, listed by 'group'; separate lists for each file despite grp
-        ID.list <- unlist(getSlot(DT,"sub.samples",grps=grp,ret.obj=T),recursive=F)
-      } else {
-        ng <- getSlot(DT,"ngrps")
-        if(length(input.fn)==1 & ng==1) {
-          # all samples in 1 set
-          if(verbose) { cat(" 1 input file and 1 sample set only, getting IDs\n") }
-          ID.list <- list(unlist(getSlot(DT,"samples",ret.obj=T))) 
-        } else {
-          # separate list for each file listed by group sets
-          if(verbose) { cat(" getting all ID lists ignoring group [",ng," groups]\n",sep="") }
-          ID.list <- unlist(getSlot(DT,"sub.samples",ret.obj=T),recursive=F) 
-        }
-      }
-    } else {
-      ## GET samples using 'file.spec.txt' # deprecated
-      stop("if we need this code back, go to before march 19\n")
-    }
-  }
-  ##print(headl(ID.list))
-  cmb.ID.list <- paste(do.call("c",ID.list))
-  ##print(length(ID.list[[1]]))
-  numfls <- length(ID.list)
-  ### GET THE ORDERED SNP LIST ###
-  if(is.data.tracker(DT)) {
-    snp.fn <- getSlot(DT,"snps")
-  } else {
-    snp.fn <- find.file(snp.fn,dir$ano,dir)  # snp annotation file name
-  }
-  #print(head(cmb.ID.list))
-  cat(paste(" reading snps from",snp.fn,"\n"))
-  snp.list <- readLines(snp.fn) ##; print(head(snp.list))
-  ## Multiple possible input situations: 
-  ##   FOR LRR: unlist all input files and subsamples for selected grp
-  ##    n groups in study, 1 file each: should have input.fn length 1, id.list length 1
-  ##    n groups in study, m_n files each: should have input.fn length m_n, id.list length m_n
-  ##   FOR BAF: unlist all input files and subsamples for all grps
-  ##    n groups in study, 1 file each: should have input.fn length n, id.list length n
-  ##    n groups in study, m_n files each: should have input.fn length sum_i(m_n=i), id.list length sum_i(m_n=i)
-  ## DEBUG print(length(input.fn)); print(numfls); print(input.fn)
-  if(length(input.fn)>1) {
-    if(length(input.fn)==numfls) {
-      if(verbose) {
-        warning(paste("reading a single cohort from",numfls,"source files. Edit file.spec.txt if this is unexpected"))
-      }
-    } else {
-      stop("Error: when reading a single cohort from multiple source files, need same number of id files")
-    }
-  } else { if(numfls!=1) { warning(paste("length of ID list was",numfls,"but only 1 input file")) } } 
-  #### DETERMINE FILE DIMENSIONS ####
-  num.sub <- length(cmb.ID.list) #ID.list)
-  smp.szs <- sapply(ID.list,length)
-  fil.ofs <- c(0,cumsum(smp.szs)) #note last element is the end of the last file
-  num.snp <- length(snp.list)
-  cat(paste(" found",num.sub,"samples and",num.snp,"markers\n"))
-
-  # use 'pref' as the name of the big.matrix backing files for this cohort
-  bck.fn <- paste(pref,"bckfile",sep="")
-  des.fn <- paste(pref,"descrFile",sep="")
-  import.big.data(input.fn=input.fn, dir=dir, grp=grp,
-      row.names=snp.list, col.names=ID.list, 
-      dat.file.suf=dat.file.suf, pref=pref, delete.existing=delete.existing, 
-      ret.obj=ret.obj, verbose=verbose, 
-     dat.type=dat.type, dat.typeL=dat.typeL, ram.gb=2, hd.gb=max.mem)
-
-  if(ret.obj) {
-    return(describe(bigVar))
-  } else {
-    return(des.fn)
-  } 
-  cat("...complete!\n")
-
-}
-
 # patch some reader functions that cause trouble for long format files :(
 # fix problem in reader:::get.delim :(
 get.delim <- function(...,delims=c("\t"," ","\t| +",";",",")) {
@@ -1283,10 +1123,35 @@ get.delim <- function(...,delims=c("\t"," ","\t| +",";",",")) {
 file.ncol <- function(fn,...) { reader:::file.ncol(fn,del=get.delim(fn),...) }
 
 
-  
-top <- function() {
+# to add to NCmisc
+#' Monitor CPU, RAM and Processes
+#' 
+#' This function runs the unix 'top' command and returns the overall CPU and RAM usage,
+#' and optionally the table of processes and resource use for each. Works only with
+#' unix-based systems such as Mac OS X and Linux, where 'top' is installed. Default
+#' is to return CPU and RAM overall stats, to get detailed stats instead, set Table=TRUE.
+#'
+#' @param CPU logical, whether to return overall CPU usage information
+#' @param RAM logical, whether to return overall RAM usage information
+#' @param Table logical, whether to return system information for separate processes. This
+#'  is returned as table with all of the same columns as a command line 'top' command. If
+#'  'Table=TRUE' is set, then the default becomes not to return the overall CPU/RAM usage stats.
+#'  The dataframe returned will have been sorted by descending memory usage.
+#' @param procs integer, if Table=TRUE, then the maximum number of processes to return (default 20)
+#' @param mem.key character, default for Linux is 'mem' and for Mac OS X, 'physmem', but if the 'top'
+#'  command on your system displays memory usage using a different label, then enter it here
+#'  (case insensitive) to override defaults.
+#' @param cpu.key character, default for Linux and Mac OS X is 'cpu', but if the top
+#'  command on your system displays CPU usage using a different label, then enter it here.
+#' @export
+#' @author Nicholas Cooper
+#' @examples
+#' top()
+#' top(Table=T,proc=5)
+top <- function(CPU=!Table,RAM=!Table,Table=F,procs=20,mem.key=NULL,cpu.key=NULL) {
+  if(!RAM & !CPU & !Table) { warning("Deselected all options, null will be returned"); return(NULL) }
   if(!check.linux.install("top")) {
-    warning("'top' command only works on Mac OS X and linux")
+    warning("'top' command only works on Mac OS X and Linux")
     return(NULL)
   }
   if(toupper(Sys.info()["sysname"])=="DARWIN") { macos <- T } else { macos <- F }
@@ -1296,9 +1161,8 @@ top <- function() {
     if(length(txt)==0) { warning("command failed"); return(NULL) }
     dtt <- divide.top.txt(txt)
     parz <- dtt$table; headr <- dtt$header
-    ram.gb.list <- suck.mem(headr,key="physmem")
-    cpu.pc.list <- suck.cpu(headr)
-    return()
+    if(!is.character(mem.key)) { mem.key <- "physmem" }
+    if(RAM) { ram.gb.list <- suck.mem(headr,key=mem.key) }
   }
   if(!macos) {
     ## LINUX
@@ -1306,19 +1170,31 @@ top <- function() {
     if(length(txt)==0) { warning("command failed"); return(NULL) }
     dtt <- divide.top.txt(txt)
     parz <- dtt$table; headr <- dtt$header
-    ram.gb.list <- suck.mem(headr)
-    cpu.pc.list <- suck.cpu(headr)
+    if(!is.character(mem.key)) { mem.key <- "mem" }
+    if(RAM) { ram.gb.list <- suck.mem(headr,key=mem.key) }
   }
-  tab <- make.top.tab(parz)
-  mem.col <- grep("mem",colnames(tab),ignore.case=T)[1]
-  if(is.na(mem.col)) { mem.col <- grep("RSIZE",colnames(tab),ignore.case=T)[1] }
-  cpu.col <- grep("cpu",colnames(tab),ignore.case=T)[1]
-  tab <- tab[rev(order(tab[,mem.col])),]
-  tab <- tab[rev(order(tab[,cpu.col])),];     tab <- tab[rev(order(tab[,mem.col])),]
-  return(list(CPU=cpu.pc.list,RAM=ram.gb.list,Table=tab))
+  if(!is.character(cpu.key)) { cpu.key <- "cpu" }
+  if(CPU) { cpu.pc.list <- suck.cpu(headr,key=cpu.key) }
+  if(Table) {
+    tab <- make.top.tab(parz)
+    mem.col <- grep("mem",colnames(tab),ignore.case=T)[1]
+    if(is.na(mem.col)) { mem.col <- grep("RSIZE",colnames(tab),ignore.case=T)[1] }
+    cpu.col <- grep("cpu",colnames(tab),ignore.case=T)[1]
+    tab <- tab[rev(order(tab[,mem.col])),]
+    tab <- tab[rev(order(tab[,cpu.col])),];     tab <- tab[rev(order(tab[,mem.col])),]
+    if(is.na(as.numeric(procs))) { procs <- nrow(tab) } else { procs <- round(procs) }
+    procs <- min(c(procs,nrow(tab)),na.rm=T)
+  }
+  outlist <- NULL; outnms <- NULL
+  if(CPU) { outlist <- c(outlist,list(cpu.pc.list)); outnms <- c(outnms,"CPU") }
+  if(RAM) { outlist <- c(outlist,list(ram.gb.list)); outnms <- c(outnms,"RAM") }
+  if(Table) { outlist <- c(outlist,list(tab[1:procs,])); outnms <- c(outnms,"Table") }
+  names(outlist) <- outnms
+  return(outlist)
 }
 
 
+# internal function to support top() function
 make.top.tab <- function(parz) {
   cnts <- sapply(parz,length)
   exp.lines <- Mode(cnts)
@@ -1332,6 +1208,7 @@ make.top.tab <- function(parz) {
   return(tab)
 }
 
+# internal function to support top() function
 divide.top.txt <- function(txt) {
   parz <- strsplit(txt," +|\t")
   parz <- lapply(parz,function(X) { X <- X[!is.na(X)] ; X[X!=""] } ) 
@@ -1341,6 +1218,7 @@ divide.top.txt <- function(txt) {
   return(list(header=headr,table=parz))
 }
 
+# internal function to support top() function
 suck.num.from.txt <- function(txt) {
   splt <- strsplit(txt,"")
   nmall <- numeric()
@@ -1353,6 +1231,7 @@ suck.num.from.txt <- function(txt) {
   return(nmall)
 }
 
+# internal function to support top() function
 suck.cpu <- function(headr,key="cpu") {
   cpz <- grep(key,headr,ignore.case=T)
   if(length(cpz)>0) {
@@ -1384,7 +1263,7 @@ suck.cpu <- function(headr,key="cpu") {
   return(list(total=user.gb,idle=idle.gb,sys=sys.gb,unit="%"))
 }
   
-  
+# internal function to support top() function
 suck.mem <- function(headr,key="Mem") {
   memz <- grep(key,headr,ignore.case=T)
   if(length(memz)>0) {
@@ -1415,7 +1294,8 @@ suck.mem <- function(headr,key="Mem") {
   }
   return(list(total=tot.gb,used=used.gb,free=free.gb,unit="Gb"))
 }
-  
+
+# internal function to support top() function  
 suck.bytes <- function(tot1,GB=T) {
   if(length(grep("k",tot1,ignore.case=T))>0) { mult <- 1000 }
   if(length(grep("m",tot1,ignore.case=T))>0) { mult <- 10^6 }
@@ -1430,15 +1310,19 @@ suck.bytes <- function(tot1,GB=T) {
 
   
 ## bit of a mess  - give it a  goo!!
-  
-rox.args <- function(txt) {
+# useful for package prep, but a pain with 'quotes'
+rox.args <- function(txt,PRE=T,POST=T,author="Nicholas Cooper") {
   # must change (")s to (')
   tspl <- strsplit(txt,",",fixed=T)  
   tspl2 <- sapply(tspl,strsplit,split="=",fixed=T)
   pars <- sapply(tspl2,"[",1)
   pars <- rmv.spc(pars)
   pars <- paste("#' @param ",pars,"\n",sep="")
+  pre <- paste("#' title\n#' \n#' description ...\n#' ...\n#' ...\n")
+  post <- paste("#' @export\n#' @seealso ...\n#' @author",author,"\n#' @examples\n#' ...\n#' ...\n")
+  if(PRE) { cat(pre) }
   cat(pars,sep="")
+  if(POST) { cat(post) }
 }
 
 #' Load a text file into a big.matrix object
@@ -1449,25 +1333,62 @@ rox.args <- function(txt) {
 #' Can import from a matrix delimited file with or without row/column names,
 #' or from a long format dataset with no row/columns names (these should be
 #' specified as separate lists).
-#' @param input.fn
-#' @param dir
-#' @param grp
-#' @param rows.fn
-#' @param cols.fn
-#' @param dat.file.suf
-#' @param pref
-#' @param delete.existing
-#' @param ret.obj
-#' @param verbose
-#' @param row.names
-#' @param col.names
-#' @param dat.type
-#' @param dat.typeL
-#' @param ram.gb
-#' @param hd.gb
+#' @param input.fn character, or list, either a single file name of the data, or
+#'  a list of multiple file name if the data is stored as multiple files. If multiple,
+#'  then the corresponding list of row or column names that is unique between files
+#'  should be a list of the same length.
+#' @param dir character, the directory containing all files. Or, if files are split between
+#'  directories, then either include the directories explicitly in the filenames, or
+#'  multiple directories can be entered as a list, with names 'big', 'ano' and 'col', where
+#'  big is the location for big.matrix objects to file-back to, 'ano' is the location
+#'  of row and column names, and 'col' is the location of the raw text datafiles.
+#' @param long logical, if TRUE, then the data is assumed to be in long format, where
+#'  each datapoint is on a new line, and the file is structured so that the data for
+#'  each case/sample/id is consecutive and ordered consistently between samples. If using
+#'  long format the file should contain no row or column names, these should be specified
+#'  in either rows.fn/cols.fn file name arguments, or row.names/col.names vector arguments.
+#'  If long=FALSE, then the dimensions of the file will be automatically detected; including
+#'  if the file is in long format, however, if you know the data is in long format, specifying
+#'  this explicitly will be quicker and guarantees the correct import method.
+#' @param rows.fn character, with the name of a text file containing the list of row labels
+#'  for the dataset. Unnecessary if importing from a matrix with row/column names in the file,
+#'  or if using the row.names parameter. Must be a list of filenames if row names are split
+#'  across multiple input.fn files.
+#' @param cols.fn character, with the name of a text file containing the list of column labels
+#'  for the dataset. Unnecessary if importing from a matrix with row/column names in the file,
+#'  or if using the col.names parameter. Must be a list of filenames if column names are split
+#'  across multiple input.fn files.
+#' @param pref character, optional prefix to use in naming the big.matrix files (description/backing files)
+#' @param delete.existing logical, if a big.matrix already exists with the same name as implied
+#'  by the current 'pref' and 'dir' arguments, then default behaviour (FALSE) is to return an error.
+#'  to overwrite any existing big.matrix file(s) of the same name(s), set this parameter to TRUE.
+#' @param ret.obj logical, whether to return a big.matrix.descriptor object (TRUE), or
+#'  just the file name of the big.matrix description file of the imported dataset.
+#' @param verbose logical, whether to display extra information about import progress and
+#'  notifications.
+#' @param row.names character vector, optional alternative to specifying rows.fn file name(s),
+#'  directly specify row names as a single vector, or a list of vectors if multiple input files
+#'  with differing row names are being imported.
+#' @param col.names character vector, optional alternative to specifying cols.fn file name(s),
+#'  directly specify oclumn names as a single vector, or a list of vectors if multiple input files
+#'  with differing column names are being imported.
+#' @param dat.type character, data type being imported, default is "double", but can specify any type
+#'  supported by a filebacked.big.matrix(), namely, "integer","char","short"; note these
+#'  are C-style data types; double=numeric, char=character, integer=integer, short=numeric (although
+#'  will be stored with less precision in the C-based big.matrix object).
+#' @param ram.gb numeric, the number of gigabytes of free RAM that it is ok for the import
+#'  to use. The higher this amount, the quicker the import will be, as flushing RAM contents
+#'  to the hard drive more regularly slows down the process. Setting this lower
+#'  will reduce the RAM footprint of the import. Note that if you set it too high, it can't
+#'  be guaranteed, but usually R and bigmemory will do a reasonable job of managing the memory,
+#'  and it shouldn't crash your computer.
+#' @param hd.gb numeric, the amount of free space on your hard disk; if you set this
+#'  parameter accurately the function will stop if it believes there is insufficient
+#'  disk space to import the object you have specified. By default this is set to 
+#'  1 terabyte, so if importing an object larger than that, you will have to increase
+#'  this parameter to make it work.
 #' @export
 #' @examples
-#' library(bigmemory); 
 #' # all file names to use in this example #
 #' all.fn <- c("rownames.txt","colnames.txt","functestdn.txt","funclongcol.txt","functest.txt",
 #'  paste("rn",1:3,".txt",sep=""),paste("cn",1:3,".txt",sep=""),
@@ -1547,9 +1468,9 @@ rox.args <- function(txt) {
 #' print.big.matrix(ii)
 #' # DELETE ALL FILES ##
 #' unlink(all.fn[!any.already]) # only delete files not initially present (prevent deleting user's files)
-import.big.data <- function(input.fn=NULL, dir=getwd(), grp=NA, long=F, rows.fn=NULL, cols.fn=NULL, dat.file.suf=".dat",
+import.big.data <- function(input.fn=NULL, dir=getwd(), long=F, rows.fn=NULL, cols.fn=NULL, dat.file.suf=".dat",
                               pref="", delete.existing=T, ret.obj=F, verbose=T, row.names=NULL, col.names=NULL,
-                              dat.type=double(1), dat.typeL="double", ram.gb=2, hd.gb=1000)
+                              dat.type="double", ram.gb=2, hd.gb=1000)
 {
   # import from a text (hopefully long format) datafile to a big.matrix
   # return bigmatrix description 'object' or name of description file according to 'ret.obj'
@@ -1564,6 +1485,16 @@ import.big.data <- function(input.fn=NULL, dir=getwd(), grp=NA, long=F, rows.fn=
     # otherwise
     dir <- list(big=dir,ano=dir,col=dir)
     if(is.list(dir)) { if(!is.null(dir[["big"]])) { dir.big <- dir$big } }
+  }
+  dat.type <- tolower(dat.type)
+  if(!dat.type %in% c("double","short","character","integer","char","numeric")) {
+    dat.type <- options()$bigmemory.default.type; as.type <- dat.type
+  } else {
+    as.type <- dat.type
+    if(dat.type=="short") { as.type <- "numeric" }
+    if(dat.type=="char") { as.type <- "character" }
+    if(dat.type=="character") { dat.type <- "char" }
+    if(dat.type=="numeric") { dat.type <- "double" }
   }
   ## Define data types for big.matrix
     # label
@@ -1718,7 +1649,7 @@ import.big.data <- function(input.fn=NULL, dir=getwd(), grp=NA, long=F, rows.fn=
   cat("\n predicted disk use: ",round(em,1),"GB\n")
   if(is.character(dir.force.slash(dir$big))) { if(dir$big=="") { dir$big <- getwd() } }
   bigVar <- big.matrix(nrow=rws,ncol=cls, backingfile=bck.fn, dimnames=list(cmb.row.list,cmb.ID.list),
-                       type=dat.typeL, backingpath=dir.force.slash(dir$big),
+                       type=dat.type, backingpath=dir.force.slash(dir$big),
                        descriptorfile=des.fn)
   for(ff in 1:numfls) {
     ifn <- cat.path(dir$col,input.fn[ff],must.exist=T)
@@ -1794,7 +1725,7 @@ import.big.data <- function(input.fn=NULL, dir=getwd(), grp=NA, long=F, rows.fn=
         for (cc in 1:cls1) {
           loop.tracker(cc,cls1)
           if (do.fl & (cc %% twty.pc)==0)  { fl.suc <- flush(bigVar) ; if(!fl.suc) { cat("flush failed\n") } }
-          bigVar[,(cc+fil.ofs[ff])] <- as(readLines(dat.file,n=rws),dat.typeL)
+          bigVar[,(cc+fil.ofs[ff])] <- as(readLines(dat.file,n=rws),as.type)
         }
       } else {
         ## row-wise file splits
@@ -1802,7 +1733,7 @@ import.big.data <- function(input.fn=NULL, dir=getwd(), grp=NA, long=F, rows.fn=
         for (cc in 1:cls) {
           loop.tracker(cc,cls)
           if (do.fl &(cc %% twty.pc)==0)  { fl.suc <- flush(bigVar) ; if(!fl.suc) { cat("flush failed\n") } }
-          bigVar[nxt.rng,cc] <- as(readLines(dat.file,n=rws1),dat.typeL)
+          bigVar[nxt.rng,cc] <- as(readLines(dat.file,n=rws1),as.type)
         }
       }
     }
@@ -1857,47 +1788,249 @@ import.big.data <- function(input.fn=NULL, dir=getwd(), grp=NA, long=F, rows.fn=
 }
 
 
-### to wrap ##
+# mean replacement code not used at this stage
+row.rep <- function(X) { X[is.na(X)] <- mean(X,na.rm=T); X }
 
 
-get.PCA.subset <- function(dir,pc.to.keep=.13,assoc=F,autosomes=T,big.fn="combinedBigMat.RData",
-                           snp.sub.fn="pca.snp.subset.txt",use.current=F,pref="PCAMatrix",n.cores=1,
-                           descr.fn="pcaSubMat.RData",nprev=0,snp.info=NULL,sample.info=NULL) 
+#internal, analog from plumbCNV
+
+select.col.row.custom <- function(bigMat,row,col)
 {
-  ## extract LRR matrix with subset of SNPs, ready for PCA analysis
-  dir <- validate.dir.for(dir,c("ano","big"))
-  load.all.libs() # load all main libraries used by plumbCNV
-  #if(add.pheno) {
-  #  sample.info <- read.sample.info(dir)
-  #  phenotype <- read.table(file=cat.path(dir$ano,"pheno.lookup.txt"))
-  #  sample.info <- add.to.sample.info(sample.info,phenotype,"phenotype")
-  #  write.sample.info(sample.info,dir)
-  #}
-  if(!is.data.frame(sample.info)) { sample.info <- read.sample.info(dir,nprev=nprev) }
-  if(is(snp.info)[1]!="RangedData") { snp.info <- read.snp.info(dir,nprev=nprev) }
-  #sample.info <- validate.samp.info(sample.info,QC.update=F,verbose=F) #this done done later anyway
-  #samp.fn <- "combined.samples.txt"
-  if(use.current & is.file(snp.sub.fn,dir$ano,dir)) {
-    snps.to.keep <- get.vec.multi.type(snp.sub.fn,dir=dir)
-  } else {
-    snps.to.keep <- extract.snp.subset(snp.info,sample.info,pc.to.keep=pc.to.keep,assoc=assoc,autosomes=autosomes,
-                                       writeResultsToFile=T,big.fn=big.fn,out.fn=snp.sub.fn,dir=dir, n.cores=n.cores)
+  # based on files/vectors of row-ids and column-ids create selection
+  # vectors to select only the ids in these lists for a matrix
+  cat(" calculating selections for rows\n")
+  # try to detect whether a vector of IDs, or file names
+  row.ref <- rownames(bigMat)  ; col.ref <- colnames(bigMat) 
+  byname <- T
+  if (length(row)==1 & length(col)==1 & is.character(row) & is.character(col))
+  {
+    cat(" [assuming 'col' and 'row' are file names containing column and row ids]")
+    if(file.exists(row)) {
+      row.sel <- readLines(row)
+    } else {
+      if(row=="") {
+        cat(c(" row subset file was empty, selecting all\n"))
+        row.sel <- row.ref
+      } else {
+        stop("Error: argument 'row' should be a vector of rows names length>1 or a filename with a list of rows (no header)")
+      }
+    }
+    if(file.exists(col)) {
+      column.sel <- readLines(col)
+    } else {
+      if(col=="") {
+        cat(c(" column subset file was empty, selecting all\n"))
+        column.sel <- col.ref
+      } else {
+        stop("Error: argument 'col' should be a vector of column names length>1 or a filename with a list of rows (no header)")
+      }
+    }
+  } else { 
+    if(is.character(row) | is.character(col)) {
+      #cat("[assuming 'col' and 'row' are vectors of column and row ids]")
+      # if blank then assign all ids
+      if(all(row=="")) {
+        row.sel <- row.ref
+      } else {
+        row.sel <- row
+      }
+      if(all(col=="")) {
+        column.sel <- col.ref
+      } else { 
+        column.sel <- col  
+      }
+    } else {
+      byname <- F
+      # assume numeric or logical selection
+      if(is.logical(row)) { row <- which(row) }
+      if(is.logical(col)) { col <- which(col) }
+      to.order.r <- row[row<=nrow(bigMat)]
+      to.order.c <- col[col<=ncol(bigMat)]
+    }
   }
-  ###bigMat <- getBigMat(big.fn,dir)
-  if(length(snps.to.keep)>100) {
-    ##writeLines(colnames(bigMat),paste(dir$ano,samp.fn,sep=""))
-    subset.descr <- big.exclude.sort(big.fn,dir=dir,T,tranMode=1,pref=pref,f.snp=snps.to.keep,verbose=F)
+  # use sort/exclusion lists to get reordering vectors
+  row.sel <- row.sel ; col.sel <- column.sel
+  
+  #print(head(row.sel));print(head(col.sel))
+  if(byname) {
+    # selection is based on row/col names
+    to.order.r <- narm(match(row.sel,rownames(bigMat)))
+    to.order.c <- narm(match(col.sel,colnames(bigMat)))
   } else {
-    stop("Error: list of snps to keep is too small - trying running again with a higher pc.to.keep\n")
+    # selection is based on row/col numbers or logical
   }
-  #if(descr.fn!="") {
-  #  save(subset.descr,file=cat.path(dir$big,descr.fn))
-  #} else { warning("submatrix description returned but not saved\n")}
-  print(subset.descr)
-  return(subset.descr)
+  if (!(length(to.order.r[!is.na(to.order.r)])>0 & length(to.order.c[!is.na(to.order.c)])>0))
+  { warning("selection of rows and/or columns has resulted in an empty dataset",
+            "\ncheck rownames, column names and selection lists for errors") }
+  
+  out.list <- list(to.order.r,to.order.c,row.sel,column.sel)
+  names(out.list) <- c("to.order.r","to.order.c","row.list","column.list")
+  return(out.list)
 }
 
 
+
+#' basically a big wrapper for deep copy, making sure you do it all right and
+#' managing the file names
+#' @param select.rows can be numbers, logical, names, or a file with names
+big.select <- function(des.fn=, select.rows=NULL, select.cols=NULL, dir=getwd(), 
+                       deepC=T, pref="thin", verbose=T )
+{
+  # sort and exclude snps/samples from a big.matrix
+  if(exists("validate.dir.for",mode="function")) {
+    ## plumbCNV specific code ##
+    dir <- do.call("validate.dir.for",list(dir=dir,elements=c("big","pc"),warn=F))  
+  } else {
+    # otherwise
+    dir <- list(big=dir,pc=dir)
+  }
+  # bigmatrix file names for re-ordered filtered matrix (which is the final output of this script)
+  if(is.character(des.fn) & length(des.fn)==1) { Fn <- gsub("descrFile","",des.fn) } else { Fn <- "" }
+  bck.fn.o <- cat.path(fn=Fn,pref=pref,suf="bckfile")
+  des.fn.o <- cat.path(fn=Fn,pref=pref,suf="descrFile")
+  R.descr <- cat.path(dir$big,des.fn.o,ext=".RData")
+  
+  bigMat <- getBigMat(des.fn,dir)
+  if(verbose) { cat(paste(" attached matrix with dims:",paste(dim(bigMat),collapse=","),"\n")) }
+  # get list of deleting/reordering vectors using annotation files
+  trans.list <- select.col.row.custom(bigMat,row=select.rows,col=select.cols)
+  if(verbose) { cat(paste(" selected",length(trans.list[[4]]),"listed samples and",length(trans.list[[3]]),"variables\n")) }
+  wrn <- "trans.list was already attached, detaching now..\n"
+  while("trans.list" %in% search()) { detach(trans.list); warning(wrn) }
+  attach(trans.list)
+  if(verbose) {
+    cat("\nReordering Variables and Samples...\n")
+    cat("\nINDEXES SUMMARY\n")
+    cat(paste(length(to.order.r),"row indexes range is from",min(to.order.r),"to",max(to.order.r),"\n"))
+    cat("-->",head(to.order.r),sep=", "); cat ("\n")
+    cat(paste(length(to.order.c),"col indexes range is from",min(to.order.c),"to",max(to.order.c),"\n"))
+    cat("-->",head(to.order.c),sep=", ")
+    cat("\n\n raw big.matrix summary before selection/ordering:\n\n")
+    print.big.matrix(bigMat,"bigMat")
+  }
+  if(!deepC)
+  {
+    # this is fast with available RAM (like 20 secs)
+    if(verbose) { cat(" running reorder in system memory\n") }
+    bigMat1 <- bigMat[to.order.r,to.order.c]
+    if(verbose) {
+      cat(" adding colnames\n") ; colnames(bigMat1) <- colnames(bigMat)[to.order.c] 
+      cat(" adding rownames\n") ; rownames(bigMat1) <- rownames(bigMat)[to.order.r] 
+      cat(" converting matrix to big.matrix\n") 
+    }
+    bigMat2 <- as.big.matrix(bigMat1, backingfile=bck.fn.o,
+                             backingpath=dir$big, descriptorfile=des.fn.o)
+    if(verbose) { cat(paste(" matrix descr saved as standard description file:",des.fn.o,"\n")) }
+    descr <- describe(bigMat2)
+  } else {
+    #this is slow but creates backing file and will speed up ops later
+    if(verbose) { cat(" starting deep copy...") }
+    bigMat2 <- deepcopy(bigMat, cols = to.order.c, rows = to.order.r,
+                        backingfile=bck.fn.o,backingpath=dir$big, descriptorfile=des.fn.o )
+    cat("done\n")
+    if(verbose) { cat("\nAdding names\n") }
+    options(bigmemory.allow.dimnames=TRUE)
+    colnames(bigMat2) <- colnames(bigMat)[to.order.c]
+    if(verbose) { cat(" added colnames\n") }
+    rownames(bigMat2) <- rownames(bigMat)[to.order.r]  
+    if(verbose) { cat(" added rownames\n") }
+    descr <- describe(bigMat2)
+    flush(bigMat2) # hopefully this will ensure the row/colnames are added to the file backing
+    if(verbose) { cat(paste(" due to use of deep copy option, recommend only to use descr saved as rbinary description file\n")) }
+  }
+  save(descr,file=R.descr)
+  if(verbose) {
+    cat(paste(" created big.matrix description file:",des.fn.o,"\n"))
+    cat(paste(" created big.matrix backing file:",bck.fn.o,"\n"))
+    cat(paste(" created big.matrix binary description file:",basename(R.descr),"\n"))
+  } 
+  while("trans.list" %in% search()) { detach(trans.list) }
+  #return(descr) 
+  return(R.descr)
+}
+
+
+## tailor this to make a random uniform selection
+uniform.select <- function(pc.to.keep=.05,dir) {  
+  # this assumes roughly whole genome coverage. breaks down if this is not roughly true
+  # uses the chr, pos, label of each snp, stored in a genoset RangedData object
+  # to yield a % (e.g, 5%) subset of snps evenly spaced throughout the genome
+  cat(" choosing spaced",round(pc.to.keep*100,1),"% subset of variables\n")
+  # to use in PCA [only for Chr 6, exclude the MHC region]
+  ## MHC chr6:30,018,000-33,606,563; build 37 only slighty earlier
+  ngPCA <- (nrow(snp.info)*ratio) # number of intervals in genome
+  av.int <- (chrInfo(snp.info)[length(snp.info),"stop"])/ngPCA # mean interval length
+  chr.uniq <- list()
+  sumo <- 0 # counter for non-unique mappings
+  for (cc in 1:n.chr)
+  {
+    rr <- range(start(snp.info[(cc)])) # start and end position of chromosome
+    l.out <- (rr[2]-rr[1])/av.int
+    # create a sequence of evenly spaced locations in the chromosome
+    lociz <- seq(from=((av.int/2)+rr[1]),to=(rr[2]-(av.int/2)),length.out=l.out)
+    # find closest SNPs to each location (lociz)
+    lc <- (matchpt(lociz, start(snp.info[(cc)])))
+    # calculate number of locations not matching uniquely
+    not.uniq <- length(lc[,1])-length(unique(lc[,1]))
+    ##cat("",paste("chr",cc,": for",not.uniq,"locations the most proximal snp was already used\n"))
+    sumo <- sumo + not.uniq
+    chr.uniq[[cc]] <- unique(lc[,1])
+  }
+  kpt <- sum(sapply(chr.uniq,length))
+  
+  cat(paste(" total number of variables kept:",kpt,"[",round(kpt/nrow(snp.info)*100,2),"%]\n"))
+  # combine snps from each chromosome get the full list of SNP IDs for PCA
+  snp.to.pca <- character()
+  for (cc in 1:n.chr) { snp.to.pca <- c( snp.to.pca,rownames(snp.info[cc])[chr.uniq[[cc]]] ) }
+  return(snp.to.pca)
+}
+
+
+
+### to wrap ##
+#### HERE !!!
+
+#' PCA/Singular Value Decomposition for big.matrix
+#' 
+#' description ...
+#' ...
+#' ...
+#' @param bigMat a big.matrix object, or any argument accepted by getBigMat(), which includes
+#'  paths to description files or even a standard matrix object.
+#' @param dir directory containing the filebacked.big.matrix, and also where the output
+#'  file will be saved by default if the save.pcs option is set TRUE. 
+#' @param pcs.to.keep integer, number of principle components to keep. Singular Value Decomposition
+#'  methods are able to run faster if they don't need to calculate every single PC for a large
+#'  matrix. Default is to calculate only the first 50; in practice even fewer than this are generally
+#'  used directly. Apart from reducing processing time, this can also reduce storage/RAM burden for 
+#'  the resulting matrix.
+#' @param thin decimal, percentage of the original number of rows you want to thin the matrix to.
+#'  If wanting to thin by columns, then use ... arguments for thin.big.mat. 
+#'  Even though this PCA function uses mainly 'big.matrix' native methods, there is a step where the
+#'  matrix must be stored fully in memory, so this limits the size of what matrix can be processed,
+#'  depending on RAM limits. If you want to conduct PCA/SVD on a matrix larger than RAM you can thin
+#'  the matrix to a percentage of the original size. Usually such a large matrix will contain correlated
+#'  measures and so the exclusion of some data-rows (variables) will have only a small impact on the
+#'  resulting principle components. In some applications tested using this function, using only 5% 
+#'  of 200,000 variables a PCA gave extremely similar results to using the full dataset.
+#' @param SVD logical, whether to use a Singular Value Decomposition method or a PCA method. The 
+#'  eigenvalues and eigenvectors of each alternative will be highly correlated so for most applications,
+#'  such as PC-correction, this shouldn't make much difference to the result. However, using SVD=TRUE
+#'  can provide significant advantages in speed, or even allow a solution on a matrix that would be
+#'  to large to practically compute full PCA. Note that only in SVD mode, and with the bigalgebra
+#'  package installed will the full speed advantage of this function be utilised.
+#' @param LAP logical, whether to use La.svd() instead of svd() when SVD=TRUE, see base:svd for more info.
+#' @param center whether to 'centre' the matrix rows by subtracting rowMeans() before conducting the PCA. This is usually
+#'  advisable, although you may wish to skip this if the matrix is already centred to save extra processing.
+#'  unlike prcomp there is no option to standardize or use the correlation matrix, if this is desired, please
+#'  standardize the bigMat object before running this function.
+#' @param save.pcs whether to save the principle component matrix and eigenvalues to a binary file with name pcs.fn
+#' @param pcs.fn name of the binary when save.pcs=TRUE
+#' @param verbose whether to display detailed progress of the PCA
+#' @export
+#' @seealso getBigMat, LRR.PCA.correct
+#' @author Nicholas Cooper
+#' @examples
 ## Demonstrate PCA versus SVD ##
 #' min.dim <- 200; nvar <- 500; subset.size <- 50
 #' mat <- matrix(rnorm(min.dim*nvar),ncol=min.dim) # mat <- t(crimtab)
@@ -1918,30 +2051,44 @@ get.PCA.subset <- function(dir,pc.to.keep=.13,assoc=F,autosomes=T,big.fn="combin
 #' print.large(cov(mat)); print.large(mat2) #  == COVmat
 #' median(abs(diag(cor(V,pr[["loadings"]])))); median(abs(diag(cor(U,pr[["scores"]]))))
 #' cor(pr$sdev,D)
-
-
-big.PCA <- function(subDescr,dir,pcs.to.keep=50,SVD=T,LAP=F,save.pcs=T,pcs.fn="PCsEVsFromPCA.RData") 
+#' bmat <- as.big.matrix(mat)
+#' result <- big.PCA(bmat,verbose=T)
+#' pca.scree.plot(result$Evalues,M=bmat,add.fit.line=T,elbow=40,linear=F,ylim=c(0,1400),n.xax=200)
+#' pca.scree.plot(result$Evalues,M=bmat,add.fit.line=T,elbow=13)
+big.PCA <- function(bigMat,dir=getwd(),pcs.to.keep=50,thin=F,SVD=T,LAP=F,center=T,save.pcs=F,pcs.fn="PCsEVsFromPCA.RData",verbose=F) 
 {
   # run principle components analysis on the SNP subset of the LRR snp x sample matrix
   # various methods to choose from with pro/cons of speed/memory, etc.
   #  must use SNP-subset to avoid LD, destroying main effects, +avoid huge memory requirements
-  dir <- validate.dir.for(dir,c("big","pc"))
+  #dir <- validate.dir.for(dir,c("big","pc"))
+  if(exists("validate.dir.for",mode="function")) {
+    ## plumbCNV specific code ##
+    dir <- do.call("validate.dir.for",list(dir=dir,elements=c("big","pc"),warn=F))  
+  } else {
+    # otherwise
+    dir <- list(big=dir,pc=dir)
+  }
   #must.use.package(c("irlba"),T)
-  pcaMat <- getBigMat(subDescr,dir)
-  cat("\nRunning Principle Components Analysis (PCA), using LRR-data subset:\n\n")
-  bigMatSummary(pcaMat,name="pcaMat")
+  pcaMat <- getBigMat(bigMat,dir)
+  if(verbose) { print.big.matrix(pcaMat,name="pcaMat") }
   est.mem <- estimate.memory(pcaMat)
-  cat(" estimated memory required for",nrow(pcaMat),"x",ncol(pcaMat),"matrix:",round(est.mem,2),
+  if(verbose | est.mem>1.5) {
+    cat(" estimated memory required for",nrow(pcaMat),"x",ncol(pcaMat),"matrix:",round(est.mem,2),
       "GB. If this exceeds available,\n  then expect PCA to take a long time or fail!\n")
+  }
   subMat <- as.matrix(pcaMat) # must convert bigmatrix to plain matrix here, no pca yet takes a bigmatrix
   rm(pcaMat)
   # center using row means
-  cat(" centering data by row means...")
-  subMat <- subMat - rowMeans(subMat)  #matrix(rep(rowMeans(subMat),times=ncol(subMat)),ncol=ncol(subMat))
-  cat(" means for first 10 snps:\n")
-  print(round(head(rowMeans(subMat),10))) # show that centering has worked
-  subMat[is.na(subMat)] <- 0 # replace missing with the mean
-  cat(" replaced missing data with mean (PCA cannot handle missing data)\n")
+  if(center) {
+    if(verbose) { cat(" centering data by row means...") }
+    subMat <- subMat - rowMeans(subMat)  #matrix(rep(rowMeans(subMat),times=ncol(subMat)),ncol=ncol(subMat))
+    subMat[is.na(subMat)] <- 0 # replace missing with the mean
+    #cat(" means for first 10 snps:\n")
+    #print(round(head(rowMeans(subMat),10))) # show that centering has worked
+  } else {
+    subMat <- apply(subMat,1,row.rep)
+  }
+  if(verbose) { cat(" replaced missing data with mean (PCA cannot handle missing data)\n") }
   #subMat <- t(subMat) # transpose
   dimz <- dim(subMat)
   if(pcs.to.keep > min(dimz)) { 
@@ -1950,38 +2097,46 @@ big.PCA <- function(subDescr,dir,pcs.to.keep=50,SVD=T,LAP=F,save.pcs=T,pcs.fn="P
     pcs.to.keep <- min(dimz)
   } 
   if(!SVD & (dimz[2]>dimz[1])) {
-    cat(" PCA using 'princomp' (only for datasets with more samples than markers)\n")
+    if(verbose) { cat(" PCA using 'princomp' (only for datasets with more samples than markers)\n") }
     print(system.time(result <- princomp(t(subMat))))
     PCs <- result$scores[,1:pcs.to.keep]
     Evalues <- result$sdev^2 # sds are sqrt of eigenvalues
   } else {
     if(!SVD) {
-      cat(" PCA by crossproduct and solving eigenvectors\n")
-      cat(" obtaining crossproduct of the matrix and transpose XtX...")
+      if(verbose) {
+        cat(" PCA by crossproduct and solving eigenvectors\n")
+        cat(" obtaining crossproduct of the matrix and transpose XtX...")
+      }
       uu <-(system.time(xtx <- crossprod(subMat)))
-      cat("took",round(uu[3]/60,1),"minutes\n")
-      cat(" obtaining eigen vectors of the crossproduct XtX...")
+      if(verbose) { 
+        cat("took",round(uu[3]/60,1),"minutes\n")
+        cat(" obtaining eigen vectors of the crossproduct XtX...")
+      }
       uu <-(system.time(result <- eigen((xtx/nrow(subMat)),symmetric=T)))
-      cat("took",round(uu[3]/60,1),"minutes\n")
+      if(verbose) {  cat("took",round(uu[3]/60,1),"minutes\n") }
       PCs <- result$vectors[,1:pcs.to.keep]
       Evalues <- result$values
     } else {
-      do.fast <- (!LAP & ((require(irlba) & require(bigalgebra))))
-      cat(" PCA by singular value decomposition...") # La.svd gives result with reversed dims. (faster?)
+      pt <- "package:"; pkgset <- gsub(pt,"",search()[grep(pt,search())])
+      do.fast <- (!LAP & (all(c("irlba","bigalgebra") %in% pkgset)))
+      if(verbose) {
+        cat(" PCA by singular value decomposition...") # La.svd gives result with reversed dims. (faster?)
+      }
       if(!LAP) {
         if(do.fast) {
           uu <-(system.time(result <- irlba(subMat,nv=pcs.to.keep,nu=0,matmul=matmul))) 
         } else {
-          cat("[without 'bigalgebra' package, slow for large datasets]\n")
+          warning("[without 'bigalgebra' package, PCA runs slowly for large datasets,",
+              "see 'big.algebra.install.help()']\n")
           uu <-(system.time(result <- svd(subMat,nv=pcs.to.keep,nu=0)))
         }
-        cat("took",round(uu[3]/60,1),"minutes\n")
+        if(verbose) { cat("took",round(uu[3]/60,1),"minutes\n") }
         PCs <- result$v[,1:pcs.to.keep]
         Evalues <- result$d^2 # singular values are the sqrt of eigenvalues
       } else {
-        cat("\n [using LAPACK alternative with La.svd]")
-        uu <- (system.time(result<- La.svd(subMat,nv=pcs.to.keep,nu=0)))
-        cat("took",round(uu[3]/60,1),"minutes\n")
+        if(verbose) { cat("\n [using LAPACK alternative with La.svd]") }
+        uu <- (system.time(result <- La.svd(subMat,nv=pcs.to.keep,nu=0)))
+        if(verbose) { cat("took",round(uu[3]/60,1),"minutes\n") }
         PCs <- t(result$vt)[,1:pcs.to.keep]  ##?
         Evalues <- result$d^2 # singular values are the sqrt of eigenvalues
       }
@@ -2011,7 +2166,14 @@ LRR.PCA.correct <- function(pca.result,descr.fn,dir,num.pcs=9,n.cores=1,pref="co
 {
   ## using results of a PCA analysis, run correction for 'num.pcs' PCs on a dataset
   # uncorrected matrix
-  dir <- validate.dir.for(dir,c("big","pc"))
+  #dir <- validate.dir.for(dir,c("big","pc"))
+  if(exists("validate.dir.for",mode="function")) {
+    ## plumbCNV specific code ##
+    dir <- do.call("validate.dir.for",list(dir=dir,elements=c("big","pc"),warn=F))  
+  } else {
+    # otherwise
+    dir <- list(big=dir,pc=dir)
+  }
   origMat <- getBigMat(descr.fn,dir)
   cat("\nRunning Principle Components correction (PC-correction), using LRR-dataset:\n")
   bigMatSummary(origMat,name="origMat")
