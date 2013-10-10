@@ -181,6 +181,7 @@ print.large <- function(largeMat,row=3,col=2,digits=4,rL="Row#",rlab="rownames",
 #' @param add.fit.line logical, if there is an existing scree plot, adds the fit line from this estimate
 #'  to the plot ('pca.scree.plots' can use this option using the parameter of the same name)
 #' @param col colour for the fit line
+#' @param ignore.warn ignore warnings when an estimate is not required (i.e, all eigenvalues present)
 #' @seealso pca.scree.plots
 #' @export
 #' @examples
@@ -203,11 +204,17 @@ print.large <- function(largeMat,row=3,col=2,digits=4,rL="Row#",rlab="rownames",
 #' eig.varpc <- estimate.eig.vpcs((pca3$sdev^2),M=mat)$variance.pcs
 #' print(eig.varpc[1:elbow])  ## different analysis, but fairly similar var.pcs
 estimate.eig.vpcs <- function(eigenv=NULL,min.dim=length(eigenv),M=NULL,elbow=NA,linear=T,
-                              print.est=T,print.coef=F,add.fit.line=F,col="blue") {
-  if(all(is.na(elbow))) { elbow <- 3 } 
+                              print.est=T,print.coef=F,add.fit.line=F,col="blue",ignore.warn=F) {
   ## if matrix is optionally inputted, calculate the minimum dim automatically
   if(!is.null(M)) { if(!is.null(dim(M))) { min.dim <- min(dim(M),na.rm=T) } }
   n.comp <- length(eigenv) # max(c(min.dim,length(eigenv)),na.rm=T)
+  if(all(is.na(elbow))) { 
+    if(n.comp==min.dim) {
+      elbow <- quick.elbow(eigenv)
+    } else {
+      elbow <- 3 
+    }
+  }
   elbow <- round(min(n.comp,elbow,na.rm=T)) # make sure not > n.comp
   if(!is.numeric(eigenv)) { warning("eigenv not numeric"); return(NULL) }
   #catdb(c("elbow","min.dim","n.comp","eigenv"))
@@ -215,7 +222,7 @@ estimate.eig.vpcs <- function(eigenv=NULL,min.dim=length(eigenv),M=NULL,elbow=NA
     # if most/all eigenvalues already present this is not needed, or if parameters insufficient
     # then don't try to calculate the AUC of the remaining eigenvalues
     if(n.comp==min.dim) {
-      cat("All eigenvalues present, estimate not required\n")
+      if(!ignore.warn) { cat("All eigenvalues present, estimate not required\n") }
     } else {
       warning("didn't attempt to estimate eigenvalues as there were",
         " very few unknowns compared to the number of samples,",
@@ -242,7 +249,7 @@ estimate.eig.vpcs <- function(eigenv=NULL,min.dim=length(eigenv),M=NULL,elbow=NA
     }
     # intercept ignored as the asymptote should theoretically be zero so assumption
     # values > this reflect noise variance that might dissipate as x--> n.samp
-      if(print.est) {
+    if(print.est) {
       not.calc <- min.dim-length(eigenv)
       cat(" estimate of eigenvalue sum of",not.calc,"uncalculated eigenvalues:",(as.numeric(tail.var)),"\n")
     }
@@ -315,8 +322,14 @@ pca.scree.plot <- function(eigenv,elbow=NA,printvar=T,min.dim=NA,M=NULL,add.fit.
 {
   # do SCREE PLOTS AND calculate EIGENVALUE VARIANCE after a PCA
   if(!is.null(M)) { if(!is.null(dim(M))) { min.dim <- min(dim(M),na.rm=T) } }
-  if(all(is.na(elbow))) { elbow <- 3 }
   n.comp <- length(eigenv)
+  if(all(is.na(elbow))) { 
+    if(n.comp==min.dim) {
+      elbow <- quick.elbow(eigenv)
+    } else {
+      elbow <- 3 
+    }
+  }
   elbow <- round(min(n.comp,elbow,na.rm=T))
   plot(eigenv[1:n.xax],bty="l",xlab="number of principle components",
        ylab="eigenvalues",bg="green",pch=21,...)
@@ -333,7 +346,32 @@ pca.scree.plot <- function(eigenv,elbow=NA,printvar=T,min.dim=NA,M=NULL,add.fit.
 }
 
 
-
+# quickly choose an elbow for a PC. 
+# at variance below 5% per component, choose the largest % drop
+# designed for variance percentages, but will also work given a full set of Evalues
+quick.elbow <- function(varpc,low=.04) {
+  ee <- varpc/sum(varpc) # ensure sums to 1
+  while(low>=max(ee)) { low <- low/2 } # when no big components, then adjust 'low'
+  low.ones <- which(ee<low)
+  others <- length(which(ee>=low))
+  if(length(low.ones)>0) {
+    if(length(low.ones)==1) {
+      elbow <- low.ones 
+    } else {
+      set <- ee[low.ones]
+      pc.drops <- abs(diff(set))/(set[1:(length(set)-1)])
+      elbow <- which(pc.drops==max(pc.drops,na.rm=T))[1]+others
+    }
+  } else { 
+    # if somehow there are no small eigenvalues, just choose the elbow as the second last
+    elbow <- length(eigenv)-1 
+  }
+  if(elbow<1) {
+    warning("elbow calculation failed, return zero")
+    return(0)
+  }
+  return(elbow)
+}
 
 
 
@@ -1873,7 +1911,7 @@ select.col.row.custom <- function(bigMat,row,col)
 #' basically a big wrapper for deep copy, making sure you do it all right and
 #' managing the file names
 #' @param select.rows can be numbers, logical, names, or a file with names
-big.select <- function(des.fn=, select.rows=NULL, select.cols=NULL, dir=getwd(), 
+big.select <- function(des.fn, select.rows=NULL, select.cols=NULL, dir=getwd(), 
                        deepC=T, pref="thin", verbose=T )
 {
   # sort and exclude snps/samples from a big.matrix
@@ -1949,40 +1987,119 @@ big.select <- function(des.fn=, select.rows=NULL, select.cols=NULL, dir=getwd(),
   return(R.descr)
 }
 
+#big.select (des.fn=, select.rows=NULL, select.cols=NULL, dir=getwd(), 
+#                       deepC=T, pref="thin", verbose=T )
+## returns a set of rows/cols most representative of the PCs for a subset
+# HERE does it really work on rows=F?????
+# mini.pca.select(t(mat),.4,rows=T)
+# mini.pca.select(t(mat),.4,rows=F)
+# mini.pca.select(mat,.4,rows=F)
+# mini.pca.select(mat,.4,rows=T)
+mini.pca.select <- function(bigMat,keep=.05,rows=TRUE,dir=getwd(),random=TRUE,ram.gb=0.1,...) {  
+  # select an exactly evenly spaced subset (reproduceable)
+  if(rows) { N <- nrow(bigMat) } else { N <- ncol(bigMat) }
+  if(keep>2) {
+    new.n <- round(keep)
+  } else {
+    new.n <- round(max(0,min(1,keep))*N)
+  }
+  min.other <- min(c(dim(bigMat)/2,20)) # e.g, minimum of 20 sample subset to test with very large variable set
+  max.other <- min(c(dim(bigMat)/2,200)) # a good amount to test on
+  if(estimate.memory(c(N,min.other))>ram.gb) {
+    ## too big to do this
+    warning("The matrix selected has too many variables to do a mini-PCA on a meaningful subset. Suggest choosing an alternative subset method")
+    return(NULL)
+  } 
+  if(estimate.memory(c(N,max.other))<ram.gb) {
+    # go with max
+    keeper <- max.other
+  } else {
+    # go with best we can up to that memory point
+    mult <- estimate.memory(c(N,max.other))/ram.gb
+    keeper <- (max.other/mult)
+  }
+  rc <- uniform.select(bigMat,keep=keeper,rows=!rows,dir=dir,random=random)
+  ## do it here
+  sub.mat <- bigMat[rc[[1]],rc[[2]]]
+  print(dim(sub.mat))
+  quick.pc <- big.PCA(sub.mat,...)
+  el <- quick.elbow(quick.pc$Evalues)
+  varpcs <- estimate.eig.vpcs(eigenv=quick.pc$Evalues,M=sub.mat,elbow=el,print.est=F)$variance.pcs
+  el <- quick.elbow(varpcs)
+  pc <- quick.pc$PCs[,1:el]; 
+  if(ncol(sub.mat)==nrow(pc)) {
+    cm <- abs(cor(pc,t(sub.mat)))
+  } else {
+    cm <- cor(pc,sub.mat)
+  }
+  selected <- logical(ncol(cm)) # number of variables long logical
+  new.set <- NULL
+  vpc <- varpcs[1:el]/sum(varpcs[1:el])
+  per.pc <- round(new.n*vpc)
+  # make sure total number to choose will be exactly right
+  while(sum(per.pc)>new.n) { rr <- sample(1:length(per.pc),1); per.pc[rr] <- max(0,per.pc[rr]-1) }
+  while(sum(per.pc)<new.n) { rr <- sample(1:length(per.pc),1); per.pc[rr] <- max(0,per.pc[rr]+1) }
+  for (cc in 1:nrow(cm)) {
+    nxt.row <- cm[cc,]; indc <- 1:ncol(cm)
+    nxt.row <- nxt.row[!selected]; indc <- indc[!selected]
+    if(per.pc[cc]>0) {
+      chc <- (indc[rev(order(nxt.row))])[1:per.pc[cc]]
+      #print((nxt.row[rev(order(nxt.row))])[1:per.pc[cc]])
+      new.set <- c(new.set,chc)
+      selected[new.set] <- T
+    }
+  }  
+  return(sort(new.set))
+}  
 
 ## tailor this to make a random uniform selection
-uniform.select <- function(pc.to.keep=.05,dir) {  
-  # this assumes roughly whole genome coverage. breaks down if this is not roughly true
-  # uses the chr, pos, label of each snp, stored in a genoset RangedData object
-  # to yield a % (e.g, 5%) subset of snps evenly spaced throughout the genome
-  cat(" choosing spaced",round(pc.to.keep*100,1),"% subset of variables\n")
-  # to use in PCA [only for Chr 6, exclude the MHC region]
-  ## MHC chr6:30,018,000-33,606,563; build 37 only slighty earlier
-  ngPCA <- (nrow(snp.info)*ratio) # number of intervals in genome
-  av.int <- (chrInfo(snp.info)[length(snp.info),"stop"])/ngPCA # mean interval length
-  chr.uniq <- list()
-  sumo <- 0 # counter for non-unique mappings
-  for (cc in 1:n.chr)
-  {
-    rr <- range(start(snp.info[(cc)])) # start and end position of chromosome
-    l.out <- (rr[2]-rr[1])/av.int
-    # create a sequence of evenly spaced locations in the chromosome
-    lociz <- seq(from=((av.int/2)+rr[1]),to=(rr[2]-(av.int/2)),length.out=l.out)
-    # find closest SNPs to each location (lociz)
-    lc <- (matchpt(lociz, start(snp.info[(cc)])))
-    # calculate number of locations not matching uniquely
-    not.uniq <- length(lc[,1])-length(unique(lc[,1]))
-    ##cat("",paste("chr",cc,": for",not.uniq,"locations the most proximal snp was already used\n"))
-    sumo <- sumo + not.uniq
-    chr.uniq[[cc]] <- unique(lc[,1])
+uniform.select <- function(bigMat,keep=.05,rows=TRUE,dir,random=TRUE,ram.gb=0.1) {  
+  # select an exactly evenly spaced subset (reproduceable)
+  if(rows) { N <- nrow(bigMat) } else { N <- ncol(bigMat) }
+  if(keep>2) {
+    new.n <- round(keep)
+  } else {
+    new.n <- round(min(0,max(1,keep))*N)
   }
-  kpt <- sum(sapply(chr.uniq,length))
-  
-  cat(paste(" total number of variables kept:",kpt,"[",round(kpt/nrow(snp.info)*100,2),"%]\n"))
-  # combine snps from each chromosome get the full list of SNP IDs for PCA
-  snp.to.pca <- character()
-  for (cc in 1:n.chr) { snp.to.pca <- c( snp.to.pca,rownames(snp.info[cc])[chr.uniq[[cc]]] ) }
-  return(snp.to.pca)
+  if(!random) {
+    X <- cut.fac(N,new.n)
+    indx <- tapply(1:N,X,function(x) { round(median(x)) })
+    indx <- as.integer(indx)
+    # select a randomly uniform subset
+  } else {
+    indx <- sort(sample(N,new.n))
+  }
+  if(rows) { 
+    outlist <- list(order.r=indx, order.c=1:ncol(bigMat)) 
+  } else {
+    outlist <- list(order.r=1:nrow(bigMat), order.c=indx)
+  }
+  return(outlist)
+}
+
+
+mat <- matrix(rnorm(10*40000),ncol=200)
+system.time(big.PCA(mat))
+## other selection methods ##
+# mini pca, and take those most correlated with PCs (weighted by var.pc)
+# do PCA on max data size that will be quick
+# choose quick elbow and take thos components as starting point
+# choose 'n' for each components corresponding to % of variance
+# select n top/bottom loading variables (remove each at a time so no double ups) from prelim pcs to
+#  make up desired number of vars
+# correlation matrix, those most correlated with other measures on mini version
+# those most correlated with a difference in phenotypes on mini version, get from corina meth
+# those least correlated with a difference in phenotypes on mini version, get from corina meth
+
+
+
+
+
+cut.fac <- function(N,n.grps,start.zero=F,factor=T) {
+  X <- findInterval(((1:N)/(N/n.grps)), 1:n.grps, all.inside=F, rightmost.closed=T)+as.numeric(!start.zero)
+  #X <- cut(1:N,n.grps,labels=F)
+  if(factor) { X <- as.factor(X) }
+  return(X)
 }
 
 
