@@ -1,5 +1,6 @@
 require(reader)
 require(NCmisc)
+require(bigmemory)
 
 #' Tidier display function for big matrix objects
 #'
@@ -154,6 +155,7 @@ print.large <- function(largeMat,row=3,col=2,digits=4,rL="Row#",rlab="rownames",
   }
 }
 
+## HERE PROVIDE OPTION TO RETURN THE ESTIMATES!!
 
 #' Estimate the variance percentages for uncalculated eigenvalues
 #'
@@ -176,6 +178,9 @@ print.large <- function(largeMat,row=3,col=2,digits=4,rL="Row#",rlab="rownames",
 #'  by the 'elbow' in  a scree plot (see 'pca.scree.plots')
 #' @param linear whether to use a linear model to model the 'noise' eigenvalues; alternative
 #'  is a 1/x model with no intercept.
+#' @param estimated logical, whether to return the estimated variance percentages for unobserved eigenvalues
+#'  along with the real data, will also generate a factor describing which values in the returned
+#'  vector are observed versus estimated.
 #' @param print.est whether to output the estimate result to the console
 #' @param print.coef whether to output the estimate regression coefficients to the console
 #' @param add.fit.line logical, if there is an existing scree plot, adds the fit line from this estimate
@@ -203,7 +208,7 @@ print.large <- function(largeMat,row=3,col=2,digits=4,rL="Row#",rlab="rownames",
 #' print(eig.varpc[1:elbow])  ## using linear model, closer to exact answer
 #' eig.varpc <- estimate.eig.vpcs((pca3$sdev^2),M=mat)$variance.pcs
 #' print(eig.varpc[1:elbow])  ## different analysis, but fairly similar var.pcs
-estimate.eig.vpcs <- function(eigenv=NULL,min.dim=length(eigenv),M=NULL,elbow=NA,linear=T,
+estimate.eig.vpcs <- function(eigenv=NULL,min.dim=length(eigenv),M=NULL,elbow=NA,linear=T,estimated=F,
                               print.est=T,print.coef=F,add.fit.line=F,col="blue",ignore.warn=F) {
   ## if matrix is optionally inputted, calculate the minimum dim automatically
   if(!is.null(M)) { if(!is.null(dim(M))) { min.dim <- min(dim(M),na.rm=T) } }
@@ -223,6 +228,7 @@ estimate.eig.vpcs <- function(eigenv=NULL,min.dim=length(eigenv),M=NULL,elbow=NA
     # then don't try to calculate the AUC of the remaining eigenvalues
     if(n.comp==min.dim) {
       if(!ignore.warn) { cat("All eigenvalues present, estimate not required\n") }
+      estimated <- F
     } else {
       warning("didn't attempt to estimate eigenvalues as there were",
         " very few unknowns compared to the number of samples,",
@@ -265,8 +271,17 @@ estimate.eig.vpcs <- function(eigenv=NULL,min.dim=length(eigenv),M=NULL,elbow=NA
     }
     var.pcs <- eigenv[1:n.comp]/(sum(eigenv)+tail.var)
   }
-  out <- list(var.pcs,tail.var)
-  names(out) <- c("variance.pcs","tail.auc")
+  if(estimated) {
+    var.pcs.comb <- numeric(min.dim); realornot <- rep("estimated",times=min.dim)
+    var.pcs.comb[(1+min.dim-length(predy)):min.dim] <- predy/(sum(eigenv)+tail.var)
+    var.pcs.comb[1:length(var.pcs)] <- var.pcs
+    realornot[1:length(var.pcs)] <- "observed"
+    out <- list(var.pcs.comb,tail.var,as.factor(realornot))
+    names(out) <- c("variance.pcs","tail.auc","estimated")
+  } else {
+    out <- list(var.pcs,tail.var)
+    names(out) <- c("variance.pcs","tail.auc")
+  }
   return(out)
 }
 
@@ -472,27 +487,31 @@ cat.db <- function(varlist,labels=NULL,counts=NULL) {
     }
     ## display appropriately according to datatype ##
     typ <- is(val)[1]
+    if(typ=="function") {
+      cat(label,": function",sep=""); return(invisible())
+    }
     if(length(unlist(val))==1) {
-      cat(label,": ",val," (",typ,", ",Dim(val),")",sep=""); return(invisible())
+      cat(label,": ",val," (",typ,", ",paste(Dim(val),collapse="*"),")",sep=""); return(invisible())
     } 
     if(is(val)[1]=="list") {
-      cat(label," (",typ,", ",Dim(val),")\n",sep=""); print(headl(val)); return(invisible())
+      cat(label," (",typ,", ",paste(Dim(val),collapse="*"),")\n",sep=""); print(headl(val)); return(invisible())
     }
     if(typ=="big.matrix") {
       print.big.matrix(val,name=label); return(invisible())
     } else {
+      print(Dim(val))
       if(!is.null(dim(val))) {
-        cat(label," (",typ,", ",Dim(val),")\n",sep="");
+        cat(label," (",typ,", ",paste(Dim(val),collapse="*"),")\n",sep="");
         print.large(val)
         return(invisible())
       } else {
-        cat(label," (",typ,", ",Dim(val),") [head]:\n",sep="")
+        cat(label," (",typ,", ",paste(Dim(val),collapse="*"),") [head]:\n",sep="")
         print(head(val))
         return(invisible())
       }
     }
   }
-  ## if data not entered as
+  ## if data not entered with a label, or as a string (not including catdb() converted calls)
   if(!is.character(varlist) | !is.null(labels)) {
     if(is.null(labels) | ((length(labels)!=1) & (length(varlist)!=length(labels)))) {
       display.var(varlist,"unknown variable"); cat("\n")
@@ -509,21 +528,49 @@ cat.db <- function(varlist,labels=NULL,counts=NULL) {
       return(invisible())
     }
     return(invisible())
-  } 
+  }
   ENVIR <- parent.frame()
   for(cc in 1:length(lab)) {
     label <- lab[cc]
     #print(sys.parent())
     #print(sys.nframe())
-    #print(sys.frame(-1))
-    val <- get(lab[cc],envir=ENVIR)
-    if(is.list(counts)) { cnts <- lapply(counts,"[",cc) } else { cnts <- NULL }
-    display.var(val,label,cnts=cnts)
-    cat("\n") 
+    #print(sys.frame(-1))#
+    mymode <- "any"
+    if(exists(label,mode="function")) { if(exists.not.function(label)) { 
+      mymode <- exists.not.function(label,T) } } # if object is also a function, what type is the other type?
+    #if(mymode=="") { mymode <- "any" }
+    val <- NULL
+    try(val <- get(label,envir=ENVIR, mode=mymode),silent=T)
+    sf <- sys.frames(); cc <- 1
+    while(is.null(val) & cc<=length(sf)) { (try(val <- get(label,envir=sf[[cc]],mode=mymode),silent=T)); cc <- cc + 1 }
+    if(!is.null(val)) {
+      if(is.list(counts)) { cnts <- lapply(counts,"[",cc) } else { cnts <- NULL }
+      display.var(val,label,cnts=cnts)
+      cat("\n") 
+    } else {
+      cat("cat.db() couldn't find variable '",label,"'\n",sep="")
+    }
   }
   return(invisible())
 }
 
+
+#for NCmisc
+exists.not.function <- function(x,ret.type=F) {
+  if(!is.character(x)) {
+    stop("x should be the name of an object [as character type]")
+  }
+  other.modes <- c("logical", "integer", "list", "double", "character", "raw", "complex", "NULL")
+  ex <- F; type <- ""
+  for(cc in 1:length(other.modes)) {
+    if(exists(x,mode=other.modes[cc])) { ex <- T ; type <- other.modes[cc] }
+  }
+  if(ret.type) {
+    return(type)
+  } else {
+    return(ex)
+  }
+}
 
 #' A more general 'dim()' function
 #'
@@ -1046,6 +1093,7 @@ quick.mat.format <- function(fn) {
   txtx <- readLines(fn,n=11) # change this to like 5 when reader is updated to save memory
   writeLines(txtx,con=temp.fn)
   first2 <- reader(temp.fn)
+  unlink(temp.fn) # remove this temporary file straight away
   if(is.null(dim(first2))) {
     ## assuming no header row #
     return(list(rownames=F,colnames=F,ncol=1,cnames=NULL))
@@ -1055,7 +1103,6 @@ quick.mat.format <- function(fn) {
   cn <- colnames(first2); if(cn[1]=="V1") { cn <- NULL }
   if(!is.null(cn)) { ecn <- T } else { ecn <- F }
   ncl <- ncol(first2)
-  unlink(temp.fn)
   return(list(rownames=ern,colnames=ecn,ncol=ncl,cnames=cn))
 }
 
@@ -1987,16 +2034,50 @@ big.select <- function(des.fn, select.rows=NULL, select.cols=NULL, dir=getwd(),
   return(R.descr)
 }
 
-#big.select (des.fn=, select.rows=NULL, select.cols=NULL, dir=getwd(), 
-#                       deepC=T, pref="thin", verbose=T )
-## returns a set of rows/cols most representative of the PCs for a subset
-# HERE does it really work on rows=F?????
-# mini.pca.select(t(mat),.4,rows=T)
-# mini.pca.select(t(mat),.4,rows=F)
-# mini.pca.select(mat,.4,rows=F)
-# mini.pca.select(mat,.4,rows=T)
-mini.pca.select <- function(bigMat,keep=.05,rows=TRUE,dir=getwd(),random=TRUE,ram.gb=0.1,...) {  
-  # select an exactly evenly spaced subset (reproduceable)
+
+
+#' Selection of a representative variable subset
+#' 
+#' Returns a subset (size='keep') of row or column numbers that are most representative of a dataset.
+#' This function performs PCA on a small subset of columns and all rows (when rows=TRUE, or vice
+#'  -versa when rows=FALSE), and selects rows (rows=TRUE) most correlated to the first 'n' principle
+#' components, where 'n' is chosen by the function quick.elbow(). The number of variables selected
+#' corresponding to each component is weighted according to how much of the variance is explained
+#' by each component.
+#' @param bigMat a big.matrix, matrix or any object accepted by getBigMat()
+#' @param keep numeric, by default a proportion (decimal) of the original number of rows/columns to choose
+#'  for the subset. Otherwise if an integer>2 then will assume this is the size of the desired subset,
+#'  e.g, for a dataset with 10,000 rows where you want a subset size of 1,000 you could set 'keep' as
+#'  either 0.1 or 1000.
+#' @param rows logical, whether the subset should be of the rows of bigMat. If rows=FALSE, then 
+#'  the subset is chosen from columns, would be equivalent to calling subpc.select(t(bigMat)),
+#'  but avoids actually performing the transpose which can save time for large matrices.
+#' @param dir the directory containing the bigMat backing file (e.g, parameter for getBigMat()).
+#' @param random logical, passed to uniform.select(), whether to take a random or uniform selection
+#'  of columns (or rows if rows=F) to run the subset PCA.
+#' @param ram.gb maximum size of the matrix in gigabytes for the subset PCA, 0.1GB is the default 
+#'  which should result in minimal processing time on a typical system. Increasing this
+#'  increases the processing time, but also the representativeness of the subset chosen. Note
+#'  that some very large matrices will not be able to be processed by this function unless 
+#'  this parameter is increased; basically if the dimension being thinned is more than 5% of
+#'  this memory limit (see estimate.memory() from NCmisc).
+#' @param ... further parameters to pass to big.PCA() which performs the subset PCA used to 
+#'  determine the most representative rows (or columns).
+#' @export
+#' @seealso uniform.select, big.PCA, getBigMat
+#' @author Nicholas Cooper 
+#' @examples
+#' mat <- matrix(rnorm(200*2000),ncol=200)
+#' bmat <- as.big.matrix(mat)
+#' ii <- subpc.select(bmat,.05,rows=TRUE) # thin down to 5% of the rows
+#' ii <- subpc.select(bmat,45,rows=FALSE) # thin down to 45 columns
+#' # show that rows=T is equivalent to rows=F of the transpose (random must be FALSE)
+#' ii1 <- subpc.select(mat,.4,rows=TRUE,random=FALSE)
+#' ii2 <- subpc.select(t(mat),.4,rows=FALSE,random=FALSE)
+#' print(all.equal(ii1,ii2))
+
+subpc.select <- function(bigMat,keep=.05,rows=TRUE,dir=getwd(),random=TRUE,ram.gb=0.1,...) {  
+  # select a subset of variables based on the most representative variables in the PCs of a subset
   if(rows) { N <- nrow(bigMat) } else { N <- ncol(bigMat) }
   if(keep>2) {
     new.n <- round(keep)
@@ -2018,29 +2099,47 @@ mini.pca.select <- function(bigMat,keep=.05,rows=TRUE,dir=getwd(),random=TRUE,ra
     mult <- estimate.memory(c(N,max.other))/ram.gb
     keeper <- (max.other/mult)
   }
+  #print(keeper)
   rc <- uniform.select(bigMat,keep=keeper,rows=!rows,dir=dir,random=random)
   ## do it here
   sub.mat <- bigMat[rc[[1]],rc[[2]]]
-  print(dim(sub.mat))
-  quick.pc <- big.PCA(sub.mat,...)
+  #print.large(sub.mat)
+  pt <- "package:"; pkgset <- gsub(pt,"",search()[grep(pt,search())])
+  uba <- (all(c("irlba","bigalgebra") %in% pkgset))
+  if(rows) {
+    quick.pc <- big.PCA(sub.mat,pcs.to.keep=NA,use.bigalgebra=uba,...)
+  } else {
+    quick.pc <- big.PCA(t(sub.mat),pcs.to.keep=NA,use.bigalgebra=uba,...)
+  }
   el <- quick.elbow(quick.pc$Evalues)
-  varpcs <- estimate.eig.vpcs(eigenv=quick.pc$Evalues,M=sub.mat,elbow=el,print.est=F)$variance.pcs
+  varpcs <- estimate.eig.vpcs(eigenv=quick.pc$Evalues,
+        M=sub.mat,elbow=el,print.est=F,estimated=T,ignore.warn=T)$variance.pcs
   el <- quick.elbow(varpcs)
   pc <- quick.pc$PCs[,1:el]; 
+  #print(dim(pc))
   if(ncol(sub.mat)==nrow(pc)) {
-    cm <- abs(cor(pc,t(sub.mat)))
+    cormat <- abs(cor(pc,t(sub.mat)))
   } else {
-    cm <- cor(pc,sub.mat)
+    cormat <- abs(cor(pc,sub.mat))
   }
-  selected <- logical(ncol(cm)) # number of variables long logical
+  #return(cormat)
+  #print(dim(cormat))
+  selected <- logical(ncol(cormat)) # number of variables long logical
   new.set <- NULL
-  vpc <- varpcs[1:el]/sum(varpcs[1:el])
-  per.pc <- round(new.n*vpc)
+  vpc <- varpcs[1:el]/sum(varpcs[1:el]) # to prevent vagaries of roundoff error
+#  return(vpc)
+#  
   # make sure total number to choose will be exactly right
-  while(sum(per.pc)>new.n) { rr <- sample(1:length(per.pc),1); per.pc[rr] <- max(0,per.pc[rr]-1) }
-  while(sum(per.pc)<new.n) { rr <- sample(1:length(per.pc),1); per.pc[rr] <- max(0,per.pc[rr]+1) }
-  for (cc in 1:nrow(cm)) {
-    nxt.row <- cm[cc,]; indc <- 1:ncol(cm)
+  if(random) {
+    per.pc <- round(new.n*vpc)
+    while(sum(per.pc)>new.n) { rr <- sample(1:length(per.pc),1); per.pc[rr] <- max(0,per.pc[rr]-1) }
+    while(sum(per.pc)<new.n) { rr <- sample(1:length(per.pc),1); per.pc[rr] <- max(0,per.pc[rr]+1) }
+  } else {
+    brks <- quantile(1:new.n,cumsum(rev(sort(vpc))))
+    per.pc <- table(findInterval(1:new.n,brks,rightmost.closed=T)+1)
+  }
+  for (cc in 1:nrow(cormat)) {
+    nxt.row <- cormat[cc,]; indc <- 1:ncol(cormat)
     nxt.row <- nxt.row[!selected]; indc <- indc[!selected]
     if(per.pc[cc]>0) {
       chc <- (indc[rev(order(nxt.row))])[1:per.pc[cc]]
@@ -2078,8 +2177,8 @@ uniform.select <- function(bigMat,keep=.05,rows=TRUE,dir,random=TRUE,ram.gb=0.1)
 }
 
 
-mat <- matrix(rnorm(10*40000),ncol=200)
-system.time(big.PCA(mat))
+#mat <- matrix(rnorm(10*40000),ncol=200)
+#system.time(big.PCA(mat))
 ## other selection methods ##
 # mini pca, and take those most correlated with PCs (weighted by var.pc)
 # do PCA on max data size that will be quick
@@ -2091,6 +2190,7 @@ system.time(big.PCA(mat))
 # those most correlated with a difference in phenotypes on mini version, get from corina meth
 # those least correlated with a difference in phenotypes on mini version, get from corina meth
 
+## HERE!!
 
 
 
@@ -2120,7 +2220,7 @@ cut.fac <- function(N,n.grps,start.zero=F,factor=T) {
 #'  methods are able to run faster if they don't need to calculate every single PC for a large
 #'  matrix. Default is to calculate only the first 50; in practice even fewer than this are generally
 #'  used directly. Apart from reducing processing time, this can also reduce storage/RAM burden for 
-#'  the resulting matrix.
+#'  the resulting matrix. Set to NA, or a number >= min(dim(bigMat)) in order to keep all PCs.
 #' @param thin decimal, percentage of the original number of rows you want to thin the matrix to.
 #'  If wanting to thin by columns, then use ... arguments for thin.big.mat. 
 #'  Even though this PCA function uses mainly 'big.matrix' native methods, there is a step where the
@@ -2172,7 +2272,7 @@ cut.fac <- function(N,n.grps,start.zero=F,factor=T) {
 #' result <- big.PCA(bmat,verbose=T)
 #' pca.scree.plot(result$Evalues,M=bmat,add.fit.line=T,elbow=40,linear=F,ylim=c(0,1400),n.xax=200)
 #' pca.scree.plot(result$Evalues,M=bmat,add.fit.line=T,elbow=13)
-big.PCA <- function(bigMat,dir=getwd(),pcs.to.keep=50,thin=F,SVD=T,LAP=F,center=T,save.pcs=F,pcs.fn="PCsEVsFromPCA.RData",verbose=F) 
+big.PCA <- function(bigMat,dir=getwd(),pcs.to.keep=50,thin=F,SVD=T,LAP=F,center=T,save.pcs=F,use.bigalgebra=T,pcs.fn="PCsEVsFromPCA.RData",verbose=F) 
 {
   # run principle components analysis on the SNP subset of the LRR snp x sample matrix
   # various methods to choose from with pro/cons of speed/memory, etc.
@@ -2208,6 +2308,8 @@ big.PCA <- function(bigMat,dir=getwd(),pcs.to.keep=50,thin=F,SVD=T,LAP=F,center=
   if(verbose) { cat(" replaced missing data with mean (PCA cannot handle missing data)\n") }
   #subMat <- t(subMat) # transpose
   dimz <- dim(subMat)
+  if(!is.numeric(pcs.to.keep) | is.integer(pcs.to.keep)) { pcs.to.keep <- NA }
+  if(is.na(pcs.to.keep)) { pcs.to.keep <- min(dimz) }
   if(pcs.to.keep > min(dimz)) { 
     # ensure not trying to extract too many pcs
     warning(paste("selected too many PCs to keep [",pcs.to.keep,"], changing to ",min(dimz),"\n",sep="")) 
@@ -2236,6 +2338,7 @@ big.PCA <- function(bigMat,dir=getwd(),pcs.to.keep=50,thin=F,SVD=T,LAP=F,center=
     } else {
       pt <- "package:"; pkgset <- gsub(pt,"",search()[grep(pt,search())])
       do.fast <- (!LAP & (all(c("irlba","bigalgebra") %in% pkgset)))
+      if(!use.bigalgebra) { do.fast <- F }
       if(verbose) {
         cat(" PCA by singular value decomposition...") # La.svd gives result with reversed dims. (faster?)
       }
@@ -2243,8 +2346,8 @@ big.PCA <- function(bigMat,dir=getwd(),pcs.to.keep=50,thin=F,SVD=T,LAP=F,center=
         if(do.fast) {
           uu <-(system.time(result <- irlba(subMat,nv=pcs.to.keep,nu=0,matmul=matmul))) 
         } else {
-          warning("[without 'bigalgebra' package, PCA runs slowly for large datasets,",
-              "see 'big.algebra.install.help()']\n")
+          if(use.bigalgebra) { warning("[without 'bigalgebra' package, PCA runs slowly for large datasets,", 
+              "see 'big.algebra.install.help()']\n") }
           uu <-(system.time(result <- svd(subMat,nv=pcs.to.keep,nu=0)))
         }
         if(verbose) { cat("took",round(uu[3]/60,1),"minutes\n") }
@@ -2425,7 +2528,7 @@ LRR.PCA.correct <- function(pca.result,descr.fn,dir,num.pcs=9,n.cores=1,pref="co
 #' At the time of writing, there is no transpose method for big.matrix()
 #' This function returns a new filebacked big.matrix which is the transpose of the input
 #' big.matrix. max.gb allows periodic manual flushing of the memory to be conducted in case
-#' the builtin memory management of R/bigmemory is not working as desired.
+#' the built-in memory management of R/bigmemory is not working as desired.
 #' This method is a non-native (not using the raw C objects from the package but merely
 #' standard R accessors and operations) algorithm to transpose a big matrix efficiently
 #' for memory usage and speed. A blank matrix is created on disk and the data is
