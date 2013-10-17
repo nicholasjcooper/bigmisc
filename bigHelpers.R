@@ -1,7 +1,7 @@
 require(reader)
 require(NCmisc)
 require(bigmemory)
-
+require(biganalytics)
 #' Tidier display function for big matrix objects
 #'
 #' This function prints the first and last columns and rows of a big matrix, and
@@ -407,6 +407,8 @@ Substitute <- function(x=NULL,...) {
 
 
 ## same as cat.db but no labels command, and input is without quotes
+#' and must be plain variable names of existing variables (no indices, args, etc)
+#' can be used inside functions and interactively
 catdb <- function(...,counts=NULL) {
   varlist <- Substitute(...)
   return(cat.db(varlist,labels=NULL,counts=counts))
@@ -490,14 +492,14 @@ cat.db <- function(varlist,labels=NULL,counts=NULL) {
     if(typ=="function") {
       cat(label,": function",sep=""); return(invisible())
     }
+    if(typ=="big.matrix") {
+      print.big.matrix(val,name=label); return(invisible())
+    }
     if(length(unlist(val))==1) {
       cat(label,": ",val," (",typ,", ",paste(Dim(val),collapse="*"),")",sep=""); return(invisible())
     } 
     if(is(val)[1]=="list") {
       cat(label," (",typ,", ",paste(Dim(val),collapse="*"),")\n",sep=""); print(headl(val)); return(invisible())
-    }
-    if(typ=="big.matrix") {
-      print.big.matrix(val,name=label); return(invisible())
     } else {
       print(Dim(val))
       if(!is.null(dim(val))) {
@@ -1242,7 +1244,7 @@ top <- function(CPU=!Table,RAM=!Table,Table=F,procs=20,mem.key=NULL,cpu.key=NULL
   if(toupper(Sys.info()["sysname"])=="DARWIN") { macos <- T } else { macos <- F }
   if(macos) {
     # MAC OS X
-    txt <- tryCatch(system("top -l 1 -n 1",intern=T), error = function(e) e)
+    txt <- tryCatch(system("top -l 1",intern=T), error = function(e) e)
     if(length(txt)==0) { warning("command failed"); return(NULL) }
     dtt <- divide.top.txt(txt)
     parz <- dtt$table; headr <- dtt$header
@@ -1409,6 +1411,87 @@ rox.args <- function(txt,PRE=T,POST=T,author="Nicholas Cooper") {
   cat(pars,sep="")
   if(POST) { cat(post) }
 }
+
+
+
+#' Generate a test matrix of random data
+#' 
+#' Generates a test matrix of easily specified size and type. Options allow
+#' automated row and column names (which might resemble labels for a SNP analysis)
+#' and return of several different formats, matrix, data.frame or big.matrix.
+#' You can specify the randomisation function (e.g, rnorm, runif, etc), as well
+#' as parameters determining the matrix size.
+#' @param size 10^size is the total number of datapoints simulated. 6 or less are fairly quick to generate,
+#'  while 7 takes a few seconds. 8 will take under a minute, 9 around ten minutes, 10, perhaps over an hour.
+#'  Values are coerced to the range of integers c(2:10).
+#' @param row.exp similar to 'nrow' when creating a matrix, except this is exponential, giving 10^row.exp rows.
+#' @param rand a function, must return 'n' values, when rand(n) is called, eg., rnorm(), runif(), numeric()
+#' @param dimnames logical, whether to generate some row and column names
+#' @param data.frame logical, whether to return as a data.frame (FALSE means return a matrix)
+#' @param big.matrix logical, whether to return as a big.matrix (overrides data.frame). If a file.name
+#'  is used then the big.matrix will be filebacked and this function returns a list with a 
+#'  a big.matrix, and the description and backing filenames.
+#' @param file.name if a character, then will write the result to tab file instead of returning
+#'  the object, will return the filename; overrides data.frame. Alternatively, if big.matrix=TRUE,
+#'  then this provides the basename for a filebacked big.matrix.
+#' @param track.big logical, whether to display a progress bar for large matrices (size>7) where progress will be slow
+#' @export
+#' @author Nicholas Cooper 
+#' @examples
+#' mat <- (generate.test.matrix(5)); catdb(mat)
+#' lst <- (generate.test.matrix(5,3,big.matrix=T,file.name="bigtest"))
+#' mat <- lst[[1]]; catdb(mat); headl(lst[2:3]); unlink(unlist(lst[2:3]))
+generate.test.matrix <- function(size=5,row.exp=2,rand=rnorm,dimnames=T,data.frame=F,big.matrix=F,file.name=NULL, track.big=T) {
+  test.size <- min(max(2,round(size)),10) # try increasing this number for larger matrices
+  dim.dif <- max(min(row.exp,size-2),1)
+  big.d <- 10^(test.size-dim.dif); bigger.d <- (10^(test.size-(dim.dif-1)))-1
+  other.d <- 10^(dim.dif) ; another.d <- (10^(dim.dif+1))-1
+  if(!is.function(rand)) { stop("rand must be a function that generates 'n' simulated values") }
+  nr <- (10^test.size)/big.d; nc <- big.d
+  if(dimnames) {
+    rown <- paste("rs",sample(10:99,nr,replace=T),sample(other.d:another.d,nr),sep="")
+    coln <- paste("ID",sample(1:9,nc,replace=T),sample(big.d:bigger.d,nc),sep="")
+    dnn <- list(rown,coln)
+  } else { dnn <- NULL }
+  M <- NULL
+  if(big.matrix) {
+    if(test.size>7) { if(is.null(file.name)) { file.name="big_test" } }
+    # automatically extract the path if one is included in file.name
+    if(dirname(file.name)!=".") { pth <- dirname(file.name); file.name <- basename(file.name) } else { pth <- NULL}
+    bck <- cat.path(fn=file.name,suf="bck")
+    descr <- cat.path(fn=file.name,suf="descr")
+    if(test.size>7) {
+     M <- big.matrix(nrow=nr,ncol=nc,backingfile=bck,descriptorfile=descr,dimnames=dnn,backingpath=pth)
+     if(nr>nc) {
+       for (cc in 1:nr) { M[cc,] <- rand(nc); if(track.big) { loop.tracker(cc,nr) }  }
+     } else {
+       for (cc in 1:nc) { M[,cc] <- rand(nr);  if(track.big) { loop.tracker(cc,nc) } }
+     }
+    }
+  }
+  if(is.null(M)) {
+    M <- matrix(rand(10^test.size),ncol=nc) # normal matrix
+    colnames(M) <- coln; rownames(M) <- rown
+  }
+  #catdb(big.d,bigger.d,other.d,another.d,M)
+  if(is.character(file.name) & !big.matrix) {
+    write.table(M,sep="\t",col.names=dimnames,row.names=dimnames,file=file.name,quote=F) # no dimnames
+    return(file.name)
+  } 
+  if(data.frame & !big.matrix) {
+    return(as.data.frame(M))
+  }
+  if(big.matrix) {
+    if(is.character(file.name)) {
+      if(!is.big.matrix(M)) { M <- as.big.matrix(M,descriptorfile=descr,backingfile=bck) }
+      return(list(M=M,descr=descr,bck=bck))
+    } else {
+      return(as.big.matrix(M))
+    }
+  }
+  return(M)
+}
+
 
 #' Load a text file into a big.matrix object
 #'
@@ -1886,6 +1969,7 @@ select.col.row.custom <- function(bigMat,row,col)
   cat(" calculating selections for rows\n")
   # try to detect whether a vector of IDs, or file names
   row.ref <- rownames(bigMat)  ; col.ref <- colnames(bigMat) 
+  row.sel <- col.sel <- NULL
   byname <- T
   if (length(row)==1 & length(col)==1 & is.character(row) & is.character(col))
   {
@@ -1901,11 +1985,11 @@ select.col.row.custom <- function(bigMat,row,col)
       }
     }
     if(file.exists(col)) {
-      column.sel <- readLines(col)
+      col.sel <- readLines(col)
     } else {
       if(col=="") {
         cat(c(" column subset file was empty, selecting all\n"))
-        column.sel <- col.ref
+        col.sel <- col.ref
       } else {
         stop("Error: argument 'col' should be a vector of column names length>1 or a filename with a list of rows (no header)")
       }
@@ -1920,9 +2004,9 @@ select.col.row.custom <- function(bigMat,row,col)
         row.sel <- row
       }
       if(all(col=="")) {
-        column.sel <- col.ref
+        col.sel <- col.ref
       } else { 
-        column.sel <- col  
+        col.sel <- col  
       }
     } else {
       byname <- F
@@ -1934,7 +2018,7 @@ select.col.row.custom <- function(bigMat,row,col)
     }
   }
   # use sort/exclusion lists to get reordering vectors
-  row.sel <- row.sel ; col.sel <- column.sel
+  #row.sel <- row.sel ; col.sel <- col.sel
   
   #print(head(row.sel));print(head(col.sel))
   if(byname) {
@@ -1948,10 +2032,38 @@ select.col.row.custom <- function(bigMat,row,col)
   { warning("selection of rows and/or columns has resulted in an empty dataset",
             "\ncheck rownames, column names and selection lists for errors") }
   
-  out.list <- list(to.order.r,to.order.c,row.sel,column.sel)
+  out.list <- list(to.order.r,to.order.c,row.sel,col.sel)
   names(out.list) <- c("to.order.r","to.order.c","row.list","column.list")
   return(out.list)
 }
+
+
+### HERE!!!
+thin <- function(X,keep=0.05,how=c("uniform","correlation","pca","association"),dir="",rows=T,pref="thin",verbose=T,...) {
+    how <- toupper(substr(how[1],1,2))
+    if(how=="UN") {
+      rc <- uniform.select(X,keep=keep,dir=dir,rows=rows,...)
+      if(rows) { subrc <- rc[[1]] } else { subrc <- rc[[2]] }
+    }
+    if(how=="CO") {
+      subrc <- subcor.select(X,keep=keep,dir=dir,rows=rows,...)
+    }
+    if(how=="PC") {
+      subrc <- subpc.select(X,keep=keep,dir=dir,rows=rows,...)
+    }
+    if(how=="AS") {
+      rows <- T
+      test.args <- list(...)
+      if(!"phenotype" %in% names(test.args)) { stop("must include argument 'phenotype' when how='association'") }
+      subrc <- select.least.assoc(X,keep=keep,dir=dir,...)
+    }
+    catdb(subrc)
+    if(rows) { sr <- subrc; sc <- 1:ncol(X) } else { sr <- 1:nrow(X); sc <- subrc }
+    bigSubMat <- big.select(X, select.rows=sr, select.cols=sc, dir=dir, 
+                           deepC=T, pref=pref, verbose=verbose )
+    return(bigSubMat)
+}
+
 
 
 
@@ -2078,6 +2190,7 @@ big.select <- function(des.fn, select.rows=NULL, select.cols=NULL, dir=getwd(),
 
 subpc.select <- function(bigMat,keep=.05,rows=TRUE,dir=getwd(),random=TRUE,ram.gb=0.1,...) {  
   # select a subset of variables based on the most representative variables in the PCs of a subset
+  bigMat <- getBigMat(bigMat,dir=dir)
   if(rows) { N <- nrow(bigMat) } else { N <- ncol(bigMat) }
   if(keep>2) {
     new.n <- round(keep)
@@ -2151,17 +2264,93 @@ subpc.select <- function(bigMat,keep=.05,rows=TRUE,dir=getwd(),random=TRUE,ram.g
   return(sort(new.set))
 }  
 
+
+
+subcor.select <- function(bigMat,keep=.05,rows=TRUE,hi.cor=T,dir=getwd(),random=TRUE,ram.gb=0.1,...) {  
+  # select a subset of variables based on the most representative variables in the PCs of a subset
+  if(rows) { N <- nrow(bigMat) } else { N <- ncol(bigMat) }
+  if(keep>2) {
+    new.n <- round(keep)
+  } else {
+    new.n <- round(max(0,min(1,keep))*N)
+  }
+  min.other <- min(c(dim(bigMat)/2,20)) # e.g, minimum of 20 sample subset to test with very large variable set
+  max.other <- min(c(dim(bigMat)/2,200)) # a good amount to test on
+  if(estimate.memory(c(N,min.other))>ram.gb) {
+    ## too big to do this
+    warning("The matrix selected has too many variables to do a mini-PCA on a meaningful subset. Suggest choosing an alternative subset method")
+    return(NULL)
+  } 
+  if(estimate.memory(c(N,max.other))<ram.gb) {
+    # go with max
+    keeper <- max.other
+  } else {
+    # go with best we can up to that memory point
+    mult <- estimate.memory(c(N,max.other))/ram.gb
+    keeper <- (max.other/mult)
+  }
+  #print(keeper)
+  rc <- uniform.select(bigMat,keep=keeper,rows=!rows,dir=dir,random=random)
+  ## do it here
+  sub.mat <- bigMat[rc[[1]],rc[[2]]]
+  #print.large(sub.mat)
+  #print(dim(pc))
+  if(!rows) {
+    cormat <- abs(cor(sub.mat))
+  } else {
+    cormat <- abs(cor(t(sub.mat)))
+  }
+  sorter <- order(rowSums(cormat))
+  if(hi.cor) {
+    rank <- rev(sorter)[1:new.n] # select top new.n correlations
+  } else {
+    rank <- sorter[1:new.n] # select new.n least correlated
+  }
+  return(sort(rank))
+}
+
+
+#' Derive a subset of a large dataset
+#' 
+#' Either randomly or uniformly select rows or columns from a large dataset
+#' to form a new smaller dataset.
+#' @param bigMat a big.matrix object, or any argument accepted by getBigMat(), which includes
+#'  paths to description files or even a standard matrix object.
+#' @param keep numeric, by default a proportion (decimal) of the original number of rows/columns to choose
+#'  for the subset. Otherwise if an integer>2 then will assume this is the size of the desired subset,
+#'  e.g, for a dataset with 10,000 rows where you want a subset size of 1,000 you could set 'keep' as
+#'  either 0.1 or 1000.
+#' @param dir directory containing the filebacked.big.matrix, same as dir for getBigMat.
+#' @param rows logical, whether the subset should be of the rows of bigMat. If rows=FALSE, then 
+#'  the subset is chosen from columns, would be equivalent to calling subpc.select(t(bigMat)),
+#'  but avoids actually performing the transpose which can save time for large matrices.
+#' @param random logical, passed to uniform.select(), whether to take a random or uniform selection
+#'  of columns (or rows if rows=F) to run the subset PCA.
+#' @param ram.gb maximum size of the matrix in gigabytes for the subset PCA, 0.1GB is the default 
+#'  which should result in minimal processing time on a typical system. Increasing this
+#'  increases the processing time, but also the representativeness of the subset chosen. Note
+#'  that some very large matrices will not be able to be processed by this function unless 
+#'  this parameter is increased; basically if the dimension being thinned is more than 5% of
+#'  this memory limit (see estimate.memory() from NCmisc).
+#' @export
+#' @seealso subpc.select
+#' @author Nicholas Cooper 
+#' @examples
+#' mat <- matrix(rnorm(200*100),ncol=200)
+#' bmat <- as.big.matrix(mat)
+#' ii <- uniform.select(bmat,.05,rows=TRUE) # thin down to 5% of the rows
+#' ii <- uniform.select(bmat,45,rows=FALSE,random=TRUE) # thin down to 45 columns
 ## tailor this to make a random uniform selection
-uniform.select <- function(bigMat,keep=.05,rows=TRUE,dir,random=TRUE,ram.gb=0.1) {  
+uniform.select <- function(bigMat,keep=.05,rows=TRUE,dir="",random=TRUE,ram.gb=0.1) {  
   # select an exactly evenly spaced subset (reproduceable)
   if(rows) { N <- nrow(bigMat) } else { N <- ncol(bigMat) }
   if(keep>2) {
     new.n <- round(keep)
   } else {
-    new.n <- round(min(0,max(1,keep))*N)
+    new.n <- round(max(0,min(1,keep))*N)
   }
   if(!random) {
-    X <- cut.fac(N,new.n)
+    X <- cut.fac(N,new.n); 
     indx <- tapply(1:N,X,function(x) { round(median(x)) })
     indx <- as.integer(indx)
     # select a randomly uniform subset
@@ -2192,6 +2381,179 @@ uniform.select <- function(bigMat,keep=.05,rows=TRUE,dir,random=TRUE,ram.gb=0.1)
 
 ## HERE!!
 
+#' Quick association tests for phenotype
+#' 
+#' Simplistic association tests, only meant for purposes of preliminary variable
+#' selection or creation of priors, etc. Quickly obtain association p-values for
+#' a big.matrix against a list of phenotypes for each row, where columns are 
+#' samples and column labels correspond to the rownames of the sample.info dataframe
+#' which contains the phenotype information, in a column labelled 'use.col'.
+#' @param bigMat a big.matrix object, or any argument accepted by getBigMat(), which includes
+#'  paths to description files or even a standard matrix object.
+#' @param dir directory containing the filebacked.big.matrix, same as dir for getBigMat.
+#' @param sample.info a data.frame with rownames corresponding to colnames of the bigMat. Must
+#'  also contain a column named 'use.col' (default 'phenotype') which contains the categorical
+#'  variable to perform the association test for phenotype, etc. This file may contain extra
+#'  ids not in colnames(bigMat), although if any column names of bigMat are missing from
+#'  sample.info a warning will be given, and the call is likely to give incorrect results.
+#' @param use.col the name of the categorical phenotype column in the data.frame 'sample.info'
+#' @param p.values logical, whether to return p.values from the associations, or F-values
+#' @param n.cores integer, if wanting to process the analysis using multiple cores, specify the number
+#' @export
+#' @seealso getBigMat
+#' @author Nicholas Cooper 
+#' @examples
+#' bmat <- generate.test.matrix(5,dim.dif=2,big.matrix=T)
+#' pheno <- rep(1,ncol(bmat)); pheno[which(runif(ncol(bmat))<.5)] <- 2
+#' ids <- colnames(bmat); samp.inf <- data.frame(phenotype=pheno); rownames(samp.inf) <- ids
+#' both <- quick.pheno.assocs(bmat,samp.inf); catdb(both)
+#' Fs <- quick.pheno.assocs(bmat,samp.inf,verbose=T,p.values=F); catdb(Fs)
+#' Ps <- quick.pheno.assocs(bmat,samp.inf,F.values=F); catdb(Ps)
+quick.pheno.assocs <- function(bigMat,sample.info=NULL,use.col="phenotype",dir="",
+                               p.values=T,F.values=T,n.cores=1,verbose=F)
+{
+  ## use sample.info
+  # create list of bigMatrix locations
+  # go 'N' snps at time, concatenate into 1 file, run regression assocs
+  # for 2 phenotypes/grps gives t values - ordinally equivalent to logistic regression with 2 groups
+  if(!all(c(use.col) %in% colnames(sample.info))) { stop(paste("sample.info was invalid for association tests, need",use.col,"column")) }
+  if(verbose) {
+    cat(" running row-wise tests against",use.col,"to filter most associated\n")
+  }
+  bigMat <- getBigMat(bigMat,dir)
+  samp.list <- colnames(bigMat); 
+  tot.samps <- length(samp.list)
+  # check that sample.info is valid, if not attempt to fix it
+  if(!is.data.frame(sample.info)) { stop("sample.info must be a data.frame (containing phenotype information for each row id)") }
+  ## ENSURE ONLY USING SAMPLES IN THE BIGMATRIX ##
+  cutt <- which(!rownames(sample.info) %in% samp.list)
+  if(length(cutt)>0) {  sample.info <- sample.info[-cutt,,drop=F]  }
+  if(ncol(bigMat)!=nrow(sample.info)) { 
+    n.mis <- length(which(colnames(bigMat) %in% rownames(sample.info)))
+    warning(n.mis,"samples in BigMat were not in sample.info [failure likely]")
+  }
+  ## determine test to use based on number of phenotypes ##
+  n.phenos <- length(table(sample.info[[use.col]],useNA=NULL))
+  t.type <- "single"
+  if(n.phenos==2) { t.type <- "t.test"}
+  if(n.phenos>2) { t.type <- "anova"}
+  if(verbose) {
+    cat(" found ",n.phenos," ",use.col,"s, ",t.type," will be used to summarise rows most associated with ",use.col,"\n\n",sep="")
+  }
+  three.test <- function(col,pheno) { return(summary(aov(col~pheno))[[1]][["F value"]][1]) }
+  two.test <- function(col,pheno) { return((cor.test(col,pheno)$statistic)^2)  }
+  ph.test <- switch(t.type,anova=three.test,t.test=two.test,single=NULL)
+  if(is.null(ph.test)) { stop("Error: used option for association test by",use.col,"but there is only 1 type in file")}
+  row.labels <- rownames(bigMat)
+  full.size <- length(row.labels)
+  good.mem.lim <- 10^7 # allows fast processing at this limit
+  if(ncol(bigMat)>10^5) { good.mem.lim <- 10*(ncol(bigMat)) }
+  #print(estimate.memory(bigMat))
+  if(estimate.memory(bigMat) < .3) { tracker <- F } else { tracker <- T }
+  opt.size <- round(good.mem.lim/tot.samps)
+  n.segs <- ceiling(full.size/opt.size)
+  #catdb(n.segs,bigMat)
+  seg.starts <- 1+c(0:(n.segs+2))*opt.size
+  seg.starts[seg.starts>full.size] <- full.size+1 # +1 ensures final snp included
+  seg.starts <- seg.starts[!duplicated(seg.starts)]
+  results <- vector("list", n.segs)
+  pheno <- sample.info[[use.col]]
+  test.seg <- matrix(numeric(),nrow=opt.size,ncol=tot.samps)
+  # break analysis into chunks that fit in memory
+  # NB: avoided parallel computing - it does not seem to add any speed here?
+  kk <- proc.time()[3]
+  if(n.cores>1) {
+    Fvalues <- bmcapply(bigMat,1,FUN=ph.test,dir=dir,by=200,n.cores=n.cores,pheno=pheno)
+    #catdb(Fvalues)
+  } else {  
+    for (dd in 1:n.segs)
+    {
+      row.subset <- (seg.starts[dd]):(seg.starts[dd+1]-1)
+      nr <- length(row.subset)
+      # test subset of snps for each segment in turn
+      test.seg[1:nr,] <- bigMat[row.subset,] 
+      results[[dd]] <- apply(test.seg[1:nr,],1,ph.test,pheno=pheno)
+      if(tracker) { loop.tracker(dd,n.segs) }
+    }
+    Fvalues <- (do.call(c,results))
+  }
+  #Fvalues <- round(Fvalues,4) # remember t^2 = F
+  if(verbose) {
+    cat(" took",round((proc.time()[3]-kk)/60,1),"minutes\n")
+  }
+  ### option to return p values? could also have option for CHI squared.
+  ## also should be able to the bigmatrix apply for a speedup
+  # p.from.t <- function(t,df) { pt(t, df, lower=FALSE) }
+  p.from.f <- function(FF,k,n) {  pf(FF, k, n,lower.tail = FALSE) }
+  # pvalues <- sapply(Fvalues^.5,p.from.t,df=tot.samps-1)
+  if(is.numeric(Fvalues)) {
+    pvalues <- sapply(Fvalues,p.from.f,k=n.phenos,n=round(tot.samps/n.phenos))
+    if(p.values) { out <- pvalues } else { out <- Fvalues }
+    if(verbose) {
+      cat("\nSummary of",if(p.values & !F.values) { "p-value" } else { "F" },"statistics returned:\n"); print(summary(out)); cat("\n")
+    }
+    if(length(row.labels)==length(out))
+    { names(out) <- row.labels } else {
+      stop("Error: analysis failure as list of row labels did not match length of test statistics")
+    }
+  } else { out <- rep(1,length(Fvalues)) }
+  if(!(p.values & F.values)) {
+    return(out)
+  } else {
+    out <- data.frame(F=Fvalues,p=pvalues)
+    rownames(out) <- row.labels
+    return(out)
+  }
+}
+
+
+#' Select subset of rows least associated with a categorical variable
+#' 
+#' Runs a quick association analysis on the dataset against a phenotype/categorical
+#' variable stored in a dataframe, and uses the results as a way to select
+#' a subset of the original matrix, so you may wish to select the 'N' least associated
+#' variables, or the 'N' most associated.
+#' @param bigMat a big.matrix object, or any argument accepted by getBigMat(), which includes
+#'  paths to description files or even a standard matrix object.
+#' @param keep numeric, by default a proportion (decimal) of the original number of rows/columns to choose
+#'  for the subset. Otherwise if an integer>2 then will assume this is the size of the desired subset,
+#'  e.g, for a dataset with 10,000 rows where you want a subset size of 1,000 you could set 'keep' as
+#'  either 0.1 or 1000.
+#' @param dir directory containing the filebacked.big.matrix, same as dir for getBigMat.
+#' @param phenotype a vector which contains the categorical variable to perform an association 
+#'  test for phenotype, etc. This should be the same length as the number of columns (e.g, samples)
+#'  in bigMat.
+#' @param least logical, whether to select TRUE, the top least associated variables, or FALSE, the most 
+#'  associated.
+#' @param n.cores integer, if wanting to process the analysis using multiple cores, specify the number
+#' @export
+#' @seealso quick.pheno.assocs
+#' @author Nicholas Cooper 
+#' @examples
+#' bmat <- generate.test.matrix(5,dim.dif=2,big.matrix=T)
+#' cor(bmat[select.least.assoc(bmat,sample.info=samp.inf,least=F),][1,],samp.inf[[1]])
+#' cor(bmat[select.least.assoc(bmat,sample.info=samp.inf,least=F),][2,],samp.inf[[1]])
+select.least.assoc <- function(bigMat,keep=.05,phenotype=NULL,least=T,dir="",n.cores=1)
+{
+  # select a subset of variables based on the most representative variables in the PCs of a subset
+  bigMat <- getBigMat(bigMat,dir=dir)
+  N <- nrow(bigMat) 
+  if(keep>2) {
+    new.n <- round(keep)
+  } else {
+    new.n <- round(max(0,min(1,keep))*N)
+  }
+  if(length(phenotype)!=ncol(bigMat)) { stop("phenotype must be the same length as ncol(bigMat)") }
+  sample.info <- data.frame(phenotype=phenotype); rownames(sample.info) <- colnames(bigMat)
+  ##association version of selecting subset of snps for PCA
+  # takes the 'pc.to.keep'% least associated with #sample.info$phenotype'
+  myPs <- quick.pheno.assocs(bigMat=bigMat,sample.info=sample.info,dir=dir,F.values=F,n.cores=n.cores)
+  rank <- order(myPs)
+  if(least) { rank <- rev(rank) }
+  cat("\nsummary of p-values for association tests\n"); print(summary(myPs))
+  kept.snps <- rank[1:new.n]
+  return(kept.snps)
+}
 
 
 
@@ -2381,7 +2743,7 @@ big.PCA <- function(bigMat,dir=getwd(),pcs.to.keep=50,thin=F,SVD=T,LAP=F,center=
 #                                      samples) and 0.7 is a user-tunable XHMM parameter. 
 
 
-LRR.PCA.correct <- function(pca.result,descr.fn,dir,num.pcs=9,n.cores=1,pref="corrected",
+LRR.PCA.correct <- function(pca.result,bigMat,dir,num.pcs=9,n.cores=1,pref="corrected",
                             big.cor.fn=NULL,write=F,sample.info=NULL,correct.sex=F,add.int=F)
 {
   ## using results of a PCA analysis, run correction for 'num.pcs' PCs on a dataset
@@ -2394,7 +2756,7 @@ LRR.PCA.correct <- function(pca.result,descr.fn,dir,num.pcs=9,n.cores=1,pref="co
     # otherwise
     dir <- list(big=dir,pc=dir)
   }
-  origMat <- getBigMat(descr.fn,dir)
+  origMat <- getBigMat(bigMat,dir)
   cat("\nRunning Principle Components correction (PC-correction), using LRR-dataset:\n")
   bigMatSummary(origMat,name="origMat")
   if(n.cores>1) { multi <- T } else { multi <- F }
