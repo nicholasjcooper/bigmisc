@@ -71,89 +71,6 @@ print.big.matrix <- function(bigMat,dir="",row=3,col=2,name=NULL,dat=T,descr=NUL
 }
 
 
-#' Tidy display function for matrix objects
-#'
-#' This function prints the first and last columns and rows of a matrix, and
-#' a few more than this if desired. Allows previewing of a matrix without 
-#' overloading the console. Mainly useful when data has row and column names.
-#'
-#' @param largeMat a matrix
-#' @param row number of rows to display
-#' @param col number of columns to display
-#' @param digits number of digits to display for numeric data
-#' @param rL row label to describe the row names/numbers, e.g, row number, ID, etc
-#' @param rlab label to describe the data rows
-#' @param clab label to describe the data columns
-#' @param rownums logical, whether to display rownumbers or ignore them
-#' @param ret logical, whether to return the result as a formatted object, or just print to console
-#' @seealso print.big.matrix
-#' @export
-#' @examples
-#' mat <- matrix(rnorm(1000),nrow=50)
-#' rownames(mat) <- paste("ID",1:50,sep="")
-#' colnames(mat) <- paste("Var",1:20,sep="")
-#' print.large(mat)
-#' print.large(mat,row=9,col=4,digits=1,rL="#",rlab="samples",clab="variables")
-print.large <- function(largeMat,row=3,col=2,digits=4,rL="Row#",rlab="rownames",clab="colnames",rownums=T,ret=F) 
-{
-  # nicely print a large matrix without overloading the output space
-  # can return result as lines of text instead of printing to screen (for printing to file)
-  # allows customization of row and column labels
-  # only worth using with data that has row/col names
-  if(length(dim(largeMat))!=2) { stop("expected largeMat to have 2 dimensions") }
-  nC <- ncol(largeMat); nR <- nrow(largeMat); 
-  if(nC<2 | nR<3) { warning("print.large only works for matrices with dims >= c(3,2), passed to print()")
-                    print(largeMat); return(NULL) }
-  row <- min(max(1,row),nR); col <- min(max(1,col),nC)
-  cN <- colnames(largeMat); rN <- rownames(largeMat)
-  if(is.null(cN)) { cN <- paste(1:ncol(largeMat)); clab <- "col#" }
-  if(is.null(rN)) { rN <- paste(1:nrow(largeMat)); rlab <- "row#"; rownums=F }
-  rD <- spc(min(2,max(nchar(paste(nR)))),".")
-  rnD <- spc(min(4,max(nchar(rN[c(1:row,nR)]))),".")
-  linez <- vector("list",row+3) #row,col =number of rows,cols to print
-  rown <- max(nchar(paste(nR)),nchar(rL))*as.numeric(rownums)
-  hdr <- (nchar(cN[c(1:col,nC)]))
-  if(is.numeric(largeMat[1,])) {
-    ## assess what the largest numbers are likely to be to adjust header spacing if necessary
-    long.nums <- max(max(abs(largeMat[1,]),na.rm=T),max(abs(largeMat[,1]),na.rm=T))
-    max.before.dp <- nchar(round(long.nums))+3
-  } else { max.before.dp <- 6 }
-  hdr[hdr<7] <- 7; hdr[hdr<(digits+max.before.dp)] <- (digits+max.before.dp)
-  idln <- max(nchar(rlab),nchar(rN[c(1:row,nR)]))
-  pad <- function(X,L) { paste(spc(L-nchar(X)),X,sep="") }
-  if(!ret) { cat("\n"); cat(spc(rown),spc(idln),clab,"\n") }
-  dotz <- "  ...  "; dotzh <- " ..... "; dotzn <- "..."
-  # make adjustments if matrix is small enough to display all rows/cols
-  if(nC<=col) { dotz <- dotzh <- "" ; col <- col-1 }
-  if(nR<=row) { lstln <- 1 } else {  lstln <- 3 }
-  ## make adjustments if not displaying rownumbers
-  if(!rownums) {
-    lstR <- "" ; rD <- ""; jstr <- rep("",times=row); rL=""
-  } else {
-    lstR <- nR; jstr <- paste(1:row)
-  }
-  linez[[1]] <- c(pad(rL,rown),pad(rlab,idln),pad(cN[c(1:col)],hdr[1:col]),
-                  dotzh,pad(cN[nC],tail(hdr,1)))
-  for (j in 1:row) { 
-    linez[[j+1]] <- c(pad(jstr[j],rown),pad(rN[j],idln),
-                      pad(round(largeMat[j,1:col],digits),hdr[1:col]),dotz,
-                      pad(round(largeMat[j,nC],digits),tail(hdr,1)))
-  }
-  linez[[row+2]] <- c(pad(rD,rown),pad(rnD,idln),pad(rep(dotzn,times=col),
-                                                   hdr[1:col]),dotz,pad(dotzn,tail(hdr,1)))
-  linez[[row+3]] <- c(pad(lstR,rown),pad(rN[nR],idln),
-                     pad(round(largeMat[nR,1:col],digits),hdr[1:col]),
-                     dotz,pad(round(largeMat[nR,nC],digits),tail(hdr,1)))
-  if(!ret) {
-    for (j in 1:(row+lstln)) {
-      cat(paste(linez[[j]],collapse=" "),"\n")
-    }
-  } else {
-    # remove last two lines if all rows are displayed
-    if(lstln==1) { for(ii in 1:2) { linez[[length(linez)]] <- NULL }  }
-    return(linez)
-  }
-}
 
 ## HERE PROVIDE OPTION TO RETURN THE ESTIMATES!!
 
@@ -208,8 +125,8 @@ print.large <- function(largeMat,row=3,col=2,digits=4,rL="Row#",rlab="rownames",
 #' print(eig.varpc[1:elbow])  ## using linear model, closer to exact answer
 #' eig.varpc <- estimate.eig.vpcs((pca3$sdev^2),M=mat)$variance.pcs
 #' print(eig.varpc[1:elbow])  ## different analysis, but fairly similar var.pcs
-estimate.eig.vpcs <- function(eigenv=NULL,min.dim=length(eigenv),M=NULL,elbow=NA,linear=T,estimated=F,
-                              print.est=T,print.coef=F,add.fit.line=F,col="blue",ignore.warn=F) {
+estimate.eig.vpcs <- function(eigenv=NULL,min.dim=length(eigenv),M=NULL,elbow=NA,linear=T,
+                              estimated=F,print.est=T,print.coef=F,add.fit.line=F,col="blue",ignore.warn=F) {
   ## if matrix is optionally inputted, calculate the minimum dim automatically
   if(!is.null(M)) { if(!is.null(dim(M))) { min.dim <- min(dim(M),na.rm=T) } }
   n.comp <- length(eigenv) # max(c(min.dim,length(eigenv)),na.rm=T)
@@ -316,24 +233,26 @@ estimate.eig.vpcs <- function(eigenv=NULL,min.dim=length(eigenv),M=NULL,elbow=NA
 #' @param ... further arguments to the plot function
 #' @seealso pca.scree.plots
 #' @export
-# @examples
+#' @examples
 #' nsamp <- 200; nvar <- 500; elbow <- 6; subset.size <- 50
-# this gives the full solution
-#'pca <- svd(mat,nv=subset.size,nu=0)
-# test with larger and smaller subset, larger gives 1/x better fit, smaller, x
-#'pca2 <- irlba(mat,nv=subset.size,nu=0)
-# show alternate fits for linear versus 1/x fit
-#'pca.scree.plot((pca2$d^2)[1:subset.size],n.xax=200,add.fit.line=T,
+#' require(irlba)
+#' #this gives the full solution
+#' pca <- svd(mat,nv=subset.size,nu=0)
+#  # test with larger and smaller subset, larger gives 1/x better fit, smaller, x
+#' pca2 <- irlba(mat,nv=subset.size,nu=0)
+#' # show alternate fits for linear versus 1/x fit
+#' pca.scree.plot((pca2$d^2)[1:subset.size],n.xax=200,add.fit.line=T,
+#'                min.dim=min(dim(mat)),linear=T, elbow=6, ylim=c(0,1400))
+#' pca.scree.plot((pca2$d^2)[1:subset.size],n.xax=200,add.fit.line=T,
+#'               min.dim=min(dim(mat)),linear=F, elbow=40, ylim=c(0,1400))
+#' subset.size <- 150
+#' pca2 <- irlba(mat,nv=subset.size,nu=0)
+#' pca.scree.plot((pca2$d^2)[1:subset.size],n.xax=200,add.fit.line=T,
 #'               min.dim=min(dim(mat)),linear=T, elbow=6, ylim=c(0,1400))
-#'pca.scree.plot((pca2$d^2)[1:subset.size],n.xax=200,add.fit.line=T,
-#'               min.dim=min(dim(mat)),linear=F, elbow=6, ylim=c(0,1400))
-#'subset.size <- 150
-#'pca2 <- irlba(mat,nv=subset.size,nu=0)
-#'pca.scree.plot((pca2$d^2)[1:subset.size],n.xax=200,add.fit.line=T,
-#'               min.dim=min(dim(mat)),linear=T, elbow=6, ylim=c(0,1400))
-#'pca.scree.plot((pca2$d^2)[1:subset.size],n.xax=200,add.fit.line=T,
-#'               min.dim=min(dim(mat)),linear=F, elbow=6, ylim=c(0,1400))
-pca.scree.plot <- function(eigenv,elbow=NA,printvar=T,min.dim=NA,M=NULL,add.fit.line=F,n.xax=max(30,length(eigenv)),linear=T,...) 
+#' pca.scree.plot((pca2$d^2)[1:subset.size],n.xax=200,add.fit.line=T,
+#'               min.dim=min(dim(mat)),linear=F, elbow=40, ylim=c(0,1400))
+pca.scree.plot <- function(eigenv,elbow=NA,printvar=T,min.dim=NA,M=NULL,add.fit.line=F,
+                           n.xax=max(30,length(eigenv)),linear=T,verbose=F,...) 
 {
   # do SCREE PLOTS AND calculate EIGENVALUE VARIANCE after a PCA
   if(!is.null(M)) { if(!is.null(dim(M))) { min.dim <- min(dim(M),na.rm=T) } }
@@ -351,9 +270,9 @@ pca.scree.plot <- function(eigenv,elbow=NA,printvar=T,min.dim=NA,M=NULL,add.fit.
   abline(v=(elbow+.5),lty="dashed")
   legend("topright",legend=c("Principle components","scree plot 'elbow' cutoff"),
          pt.bg=c("green",NA),pch=c(21,NA),lty=c(NA,"dashed"),bty="n")
-  scree.calc <- estimate.eig.vpcs(eigenv=eigenv,min.dim=min.dim,elbow=elbow,
+  scree.calc <- estimate.eig.vpcs(eigenv=eigenv,min.dim=min.dim,elbow=elbow,ignore.warn=!verbose,
                   print.est=T,print.coef=T,add.fit.line=add.fit.line,col="blue",linear=linear)
-  if(printvar) {
+  if(printvar & verbose) {
     cat(" sum of eigen-variance:",round(sum(eigenv)+scree.calc$tail.auc,2),"\n")
     cat(" variance % estimates: \n ",round(scree.calc$variance.pcs,2),"\n")
   }
@@ -388,222 +307,6 @@ quick.elbow <- function(varpc,low=.04) {
   return(elbow)
 }
 
-
-
-### add to NCmisc
-## equivalent to base:::substitute but can do any length of arguments
-# won't work if variable is NULL
-Substitute <- function(x=NULL,...) {
-  varlist <- list(...); out <- character(1)
-  if(length(varlist)>0) { 
-    extr <- Substitute(...)
-  } else {
-    extr <- NULL
-  }
-  if(!is.null(x)) { out[1] <- paste(substitute(x)) }
-  out <- c(out,extr)
-  return(out[out!=""])
-}
-
-
-## same as cat.db but no labels command, and input is without quotes
-#' and must be plain variable names of existing variables (no indices, args, etc)
-#' can be used inside functions and interactively
-catdb <- function(...,counts=NULL) {
-  varlist <- Substitute(...)
-  return(cat.db(varlist,labels=NULL,counts=counts))
-}
-
-#' Output variable states within functions during testing/debugging
-#'
-#' # to put into NCmisc
-#' By listing variables to track as character(), provides 'cat()' output 
-#' of compact and informative variable state information, e.g, variable name, value,
-#' datatype and dimension. Can also specify array or list elements, or custom labels.
-#' @param varlist character vector, the list of variable(s) to report, which will trigger
-#'  automatic labelling of the variable name, otherwise if entered as the variable value (ie.
-#'  without quotes, then will by default be displayed as 'unknown variable')
-#' @param labels, will label 'unknown variables' (see above) if entered as variables without quotes
-#' @param counts a list of array index values; so if calling during a counting loop, the
-#'  value can be reported each iteration, also printing the count index; if the list is
-#'  named the name will also appear, e.g, variable[count=1]. This list must be the same
-#'  length as varlist (and labels if not NULL), and each element [[i]] must contain as many values
-#'  as the original corresponding varlist[i] has dimensions
-#' @seealso Dim
-# @export
-# @examples
-#' # create variables of different types to show output styles #
-#' testvar1 <- 193
-#' testvar2 <- "Atol"
-#' testvar3 <- c(1:10)
-#' testvar4 <- matrix(rnorm(100),nrow=25)
-#' testvar5 <- list(first="test",second=testvar4,third=100:110)
-#' cat.db("testvar1")
-#' cat.db("testvar4")
-#' cat.db(paste("testvar",1:5,sep=""))
-#' cat.db(testvar1,"myvarname")
-#' cat.db(testvar1)
-#' # examples with loops and multiple dimensions / lists
-#' for (cc in 1:4) {
-#'  for (dd in 1:4) { cat.db("testvar4",counts=list(cc,dd)) }}
-#'
-#' for (dd in 1:3) { cat.db("testvar5",counts=list(dd=dd)) }
-cat.db <- function(varlist,labels=NULL,counts=NULL) {
-  ## for debugging, simplify code to print vars you are checking
-  lab <- varlist
-  # test whether 'counts' sublists are all of the same length as varlist, else ignore 'counts'
-  if(is.list(counts)) {  if(!all(sapply(counts,length)==length(varlist))) { 
-    counts <- NULL } } else { if(length(counts)==length(varlist)) { counts <- list(counts) } else { counts <- NULL } }
-  #val <- vector("list",length(lab))
-  display.var <- function(val,label,cnts=NULL) {
-    if(is(cnts)[1]=="list") {
-      ## if vars to debug have a counter, update the value and label with count(s)
-      if(is(val)[1]=="list") { 
-        for (dd in 1:length(cnts)) {
-          val <- val[[ cnts[[dd]] ]] 
-          if(!is.null(names(cnts))) { 
-            label <- paste(label,"[[",names(cnts)[dd],"=",cnts[[dd]],"]]",sep="") 
-          } else {
-            label <- paste(label,"[[",cnts[[dd]],"]]",sep="")
-          }
-        }
-      } else {
-        #val <- val[cnts[[dd]] ]
-        #cat.db(c("val","cnts"))
-        if(length(Dim(val))!=length(cnts)) {
-          val <- val ; warning("counts did not match dimensions")
-        } else {
-          arg.list <- vector("list",1+length(cnts)); arg.list[[1]] <- val
-          arg.list[2:(1+length(cnts))] <- cnts
-          val <- do.call("[",args=arg.list)
-          if(!is.null(names(cnts))) { 
-            label <- paste(label,"[",
-                           paste(paste(names(cnts),"=",cnts,sep=""),collapse=","),"]",sep="") 
-          } else {
-            label <- paste(label,"[",paste(cnts,collapse=","),"]",sep="")
-          }
-        }
-      }
-    } else {
-      #counts not a list
-    }
-    ## display appropriately according to datatype ##
-    typ <- is(val)[1]
-    if(typ=="function") {
-      cat(label,": function",sep=""); return(invisible())
-    }
-    if(typ=="big.matrix") {
-      print.big.matrix(val,name=label); return(invisible())
-    }
-    if(length(unlist(val))==1) {
-      cat(label,": ",val," (",typ,", ",paste(Dim(val),collapse="*"),")",sep=""); return(invisible())
-    } 
-    if(is(val)[1]=="list") {
-      cat(label," (",typ,", ",paste(Dim(val),collapse="*"),")\n",sep=""); print(headl(val)); return(invisible())
-    } else {
-      print(Dim(val))
-      if(!is.null(dim(val))) {
-        cat(label," (",typ,", ",paste(Dim(val),collapse="*"),")\n",sep="");
-        print.large(val)
-        return(invisible())
-      } else {
-        cat(label," (",typ,", ",paste(Dim(val),collapse="*"),") [head]:\n",sep="")
-        print(head(val))
-        return(invisible())
-      }
-    }
-  }
-  ## if data not entered with a label, or as a string (not including catdb() converted calls)
-  if(!is.character(varlist) | !is.null(labels)) {
-    if(is.null(labels) | ((length(labels)!=1) & (length(varlist)!=length(labels)))) {
-      display.var(varlist,"unknown variable"); cat("\n")
-    } else { 
-      for(cc in 1:length(labels)){
-        if(is.list(counts)) { cnts <- lapply(counts,"[",cc) } else { cnts <- NULL }
-        if(is.list(varlist)) {
-          display.var(varlist[[cc]],labels[cc],cnts=cnts)
-        } else {
-          display.var(varlist[cc],labels[cc],cnts=cnts)
-        }
-        cat("\n") 
-      }
-      return(invisible())
-    }
-    return(invisible())
-  }
-  ENVIR <- parent.frame()
-  for(cc in 1:length(lab)) {
-    label <- lab[cc]
-    #print(sys.parent())
-    #print(sys.nframe())
-    #print(sys.frame(-1))#
-    mymode <- "any"
-    if(exists(label,mode="function")) { if(exists.not.function(label)) { 
-      mymode <- exists.not.function(label,T) } } # if object is also a function, what type is the other type?
-    #if(mymode=="") { mymode <- "any" }
-    val <- NULL
-    try(val <- get(label,envir=ENVIR, mode=mymode),silent=T)
-    sf <- sys.frames(); cc <- 1
-    while(is.null(val) & cc<=length(sf)) { (try(val <- get(label,envir=sf[[cc]],mode=mymode),silent=T)); cc <- cc + 1 }
-    if(!is.null(val)) {
-      if(is.list(counts)) { cnts <- lapply(counts,"[",cc) } else { cnts <- NULL }
-      display.var(val,label,cnts=cnts)
-      cat("\n") 
-    } else {
-      cat("cat.db() couldn't find variable '",label,"'\n",sep="")
-    }
-  }
-  return(invisible())
-}
-
-
-#for NCmisc
-exists.not.function <- function(x,ret.type=F) {
-  if(!is.character(x)) {
-    stop("x should be the name of an object [as character type]")
-  }
-  other.modes <- c("logical", "integer", "list", "double", "character", "raw", "complex", "NULL")
-  ex <- F; type <- ""
-  for(cc in 1:length(other.modes)) {
-    if(exists(x,mode=other.modes[cc])) { ex <- T ; type <- other.modes[cc] }
-  }
-  if(ret.type) {
-    return(type)
-  } else {
-    return(ex)
-  }
-}
-
-#' A more general 'dim()' function
-#'
-#' # to put into NCmisc
-#' A more general 'dim' function. For arrays simply calls the dim() function, but for other data types, tries to
-#' provide an equivalent, for instance will call length(x) for vectors, and will
-#' recursively report dims for lists, and will attempt something sensible for other datatypes.
-#' @param x the object to find the dimension for
-#' @param cat.lists logical, for lists, TRUE will concatenate the dimesions to a single string,
-#'  or FALSE will return the sizes as a list of the same structure as the original.
-#' @seealso catdb, cat.db
-#' @export
-#' @examples
-#' # create variables of different types to show output styles #
-#' Dim(193)
-#' Dim(1:10)
-#' Dim(matrix(rnorm(100),nrow=25))
-#' Dim(list(first="test",second=testvar4,third=100:110))
-#' Dim(list(first="test",second=testvar4,third=100:110),F)
-Dim <- function(x,cat.lists=T) {
-  rez <- NULL
-  try(rez <- dim(x))
-  if(!is.null(rez)) { return(dim(x)) }
-  if(is(x)[1]=="list") { 
-    out <- lapply(x,Dim) 
-    if(cat.lists) {
-      out <- paste(out,collapse="; ")
-    }
-  } else { out <- length(x) }
-  return(out)  
-}
 
 
 # replaced by bmcapply
@@ -1209,209 +912,10 @@ get.delim <- function(...,delims=c("\t"," ","\t| +",";",",")) {
 # fix problem in reader:::file.ncol :(
 file.ncol <- function(fn,...) { reader:::file.ncol(fn,del=get.delim(fn),...) }
 
-
-# to add to NCmisc
-#' Monitor CPU, RAM and Processes
-#' 
-#' This function runs the unix 'top' command and returns the overall CPU and RAM usage,
-#' and optionally the table of processes and resource use for each. Works only with
-#' unix-based systems such as Mac OS X and Linux, where 'top' is installed. Default
-#' is to return CPU and RAM overall stats, to get detailed stats instead, set Table=TRUE.
-#'
-#' @param CPU logical, whether to return overall CPU usage information
-#' @param RAM logical, whether to return overall RAM usage information
-#' @param Table logical, whether to return system information for separate processes. This
-#'  is returned as table with all of the same columns as a command line 'top' command. If
-#'  'Table=TRUE' is set, then the default becomes not to return the overall CPU/RAM usage stats.
-#'  The dataframe returned will have been sorted by descending memory usage.
-#' @param procs integer, if Table=TRUE, then the maximum number of processes to return (default 20)
-#' @param mem.key character, default for Linux is 'mem' and for Mac OS X, 'physmem', but if the 'top'
-#'  command on your system displays memory usage using a different label, then enter it here
-#'  (case insensitive) to override defaults.
-#' @param cpu.key character, default for Linux and Mac OS X is 'cpu', but if the top
-#'  command on your system displays CPU usage using a different label, then enter it here.
-#' @export
-#' @author Nicholas Cooper
-#' @examples
-#' top()
-#' top(Table=T,proc=5)
-top <- function(CPU=!Table,RAM=!Table,Table=F,procs=20,mem.key=NULL,cpu.key=NULL) {
-  if(!RAM & !CPU & !Table) { warning("Deselected all options, null will be returned"); return(NULL) }
-  if(!check.linux.install("top")) {
-    warning("'top' command only works on Mac OS X and Linux")
-    return(NULL)
-  }
-  if(toupper(Sys.info()["sysname"])=="DARWIN") { macos <- T } else { macos <- F }
-  if(macos) {
-    # MAC OS X
-    txt <- tryCatch(system("top -l 1",intern=T), error = function(e) e)
-    if(length(txt)==0) { warning("command failed"); return(NULL) }
-    dtt <- divide.top.txt(txt)
-    parz <- dtt$table; headr <- dtt$header
-    if(!is.character(mem.key)) { mem.key <- "physmem" }
-    if(RAM) { ram.gb.list <- suck.mem(headr,key=mem.key) }
-  }
-  if(!macos) {
-    ## LINUX
-    txt <- tryCatch(system("top -n 1 -b",intern=T), error = function(e) e)
-    if(length(txt)==0) { warning("command failed"); return(NULL) }
-    dtt <- divide.top.txt(txt)
-    parz <- dtt$table; headr <- dtt$header
-    if(!is.character(mem.key)) { mem.key <- "mem" }
-    if(RAM) { ram.gb.list <- suck.mem(headr,key=mem.key) }
-  }
-  if(!is.character(cpu.key)) { cpu.key <- "cpu" }
-  if(CPU) { cpu.pc.list <- suck.cpu(headr,key=cpu.key) }
-  if(Table) {
-    tab <- make.top.tab(parz)
-    mem.col <- grep("mem",colnames(tab),ignore.case=T)[1]
-    if(is.na(mem.col)) { mem.col <- grep("RSIZE",colnames(tab),ignore.case=T)[1] }
-    cpu.col <- grep("cpu",colnames(tab),ignore.case=T)[1]
-    tab <- tab[rev(order(tab[,mem.col])),]
-    tab <- tab[rev(order(tab[,cpu.col])),];     tab <- tab[rev(order(tab[,mem.col])),]
-    if(is.na(as.numeric(procs))) { procs <- nrow(tab) } else { procs <- round(procs) }
-    procs <- min(c(procs,nrow(tab)),na.rm=T)
-  }
-  outlist <- NULL; outnms <- NULL
-  if(CPU) { outlist <- c(outlist,list(cpu.pc.list)); outnms <- c(outnms,"CPU") }
-  if(RAM) { outlist <- c(outlist,list(ram.gb.list)); outnms <- c(outnms,"RAM") }
-  if(Table) { outlist <- c(outlist,list(tab[1:procs,])); outnms <- c(outnms,"Table") }
-  names(outlist) <- outnms
-  return(outlist)
+# add some more known extensions to rmv.ext
+rmv.ext <- function(...) {
+  return(reader:::rmv.ext(...,more.known=c("RDA","DSC","BCK")))
 }
-
-
-# internal function to support top() function
-make.top.tab <- function(parz) {
-  cnts <- sapply(parz,length)
-  exp.lines <- Mode(cnts)
-  shortz <- which(cnts<exp.lines)
-  longz <- which(cnts>exp.lines)
-  parz[longz] <- lapply(parz[longz],function(X) { X[1:exp.lines] })
-  if(length(shortz)>0) { parz <- parz[-shortz] }
-  df <- as.data.frame(matrix(ncol=length(parz[[1]]),nrow=length(parz)))
-  for(cc in 1:length(parz[[1]])) { df[,cc] <- sapply(parz,"[",cc) }
-  tab <- df[-1,]; colnames(tab) <- df[1,]; rownames(tab) <- NULL
-  return(tab)
-}
-
-# internal function to support top() function
-divide.top.txt <- function(txt) {
-  parz <- strsplit(txt," +|\t")
-  parz <- lapply(parz,function(X) { X <- X[!is.na(X)] ; X[X!=""] } ) 
-  headline <- which(sapply(parz,function(X) { all(c("PID","USER") %in% toupper(X)) }))
-  parz <- parz[headline:length(parz)]
-  headr <- txt[1:(headline-1)]
-  return(list(header=headr,table=parz))
-}
-
-# internal function to support top() function
-suck.num.from.txt <- function(txt) {
-  splt <- strsplit(txt,"")
-  nmall <- numeric()
-  anm <- function(X) { suppressWarnings(as.numeric(X)) }
-  for(cc in 1:length(splt)) {
-    nm <- sapply(splt[[cc]],function(X) {
-      if(!is.na(anm(X))) { anm(X) } else { if(X==".") { X } else { NA } } } )
-    nmall[cc] <- anm(paste(narm(nm),collapse="",sep=""))
-  }
-  return(nmall)
-}
-
-# internal function to support top() function
-suck.cpu <- function(headr,key="cpu") {
-  cpz <- grep(key,headr,ignore.case=T)
-  if(length(cpz)>0) {
-    cpuline <- headr[cpz[1]]
-    ms <- strsplit(cpuline,",")[[1]]
-    ms <- gsub("cpu","",ms,ignore.case=T)
-    user <- ms[grep("us",ms,ignore.case=T)]
-    sys <- ms[grep("sy",ms,ignore.case=T)]
-    idle <- ms[grep("id",ms,ignore.case=T)]
-    if(length(user)>0) {
-      user1 <- rmv.spc(gsub("us","",gsub("user","",user,ignore.case=T)))
-      user.gb <- suck.num.from.txt(user1)
-    } else { user.gb <- NA }
-    if(length(sys)>0) {
-      sys1 <- rmv.spc(gsub("sy","",gsub("sys","",sys,ignore.case=T)))
-      sys.gb <- suck.num.from.txt(sys1)
-    } else { sys.gb <- NA }
-    if(length(idle)>0) {
-      idle1 <- rmv.spc(gsub("id","",gsub("idle","",idle,ignore.case=T)))
-      idle.gb <- suck.num.from.txt(idle1)
-    } else { idle.gb <- NA }
-    if(is.na(idle.gb) & !is.na(sys.gb) & !is.na(user.gb)) { idle.gb <- 100-user.gb-sys.gb }
-    if(is.na(sys.gb) & !is.na(idle.gb) & !is.na(user.gb)) { sys.gb <- 100-user.gb-idle.gb }
-    if(is.na(user.gb) & !is.na(sys.gb) & !is.na(idle.gb)) { user.gb <- 100-idle.gb-sys.gb }
-  } else { 
-    cat("no CPU usage information found\n")
-    return(NULL)
-  }
-  return(list(total=user.gb,idle=idle.gb,sys=sys.gb,unit="%"))
-}
-  
-# internal function to support top() function
-suck.mem <- function(headr,key="Mem") {
-  memz <- grep(key,headr,ignore.case=T)
-  if(length(memz)>0) {
-    memline <- headr[memz[1]]
-    ms <- strsplit(memline,",")[[1]]
-    ms <- gsub("mem","",ms,ignore.case=T)
-    tot <- ms[grep("total",ms,ignore.case=T)]
-    free <- ms[grep("free",ms,ignore.case=T)]
-    used <- ms[grep("used",ms,ignore.case=T)]
-    if(length(tot)>0) {
-      tot1 <- rmv.spc(gsub("total","",tot,ignore.case=T))
-      tot.gb <- suck.bytes(tot1)
-    } else { tot.gb <- NA }
-    if(length(free)>0) {
-      free1 <- rmv.spc(gsub("free","",free,ignore.case=T))
-      free.gb <- suck.bytes(free1)
-    } else { free.gb <- NA }
-    if(length(used)>0) {
-      used1 <- rmv.spc(gsub("used","",used,ignore.case=T))
-      used.gb <- suck.bytes(used1)
-    } else { used.gb <- NA }
-    if(is.na(used.gb) & !is.na(free.gb) & !is.na(tot.gb)) { used.gb <- tot.gb-free.gb }
-    if(is.na(free.gb) & !is.na(used.gb) & !is.na(tot.gb)) { free.gb <- tot.gb-used.gb }
-    if(is.na(tot.gb) & !is.na(free.gb) & !is.na(used.gb)) { tot.gb <- used.gb+free.gb }
-  } else { 
-    cat("no RAM usage information found\n")
-    return(NULL)
-  }
-  return(list(total=tot.gb,used=used.gb,free=free.gb,unit="Gb"))
-}
-
-# internal function to support top() function  
-suck.bytes <- function(tot1,GB=T) {
-  if(length(grep("k",tot1,ignore.case=T))>0) { mult <- 1000 }
-  if(length(grep("m",tot1,ignore.case=T))>0) { mult <- 10^6 }
-  if(length(grep("g",tot1,ignore.case=T))>0) { mult <- 10^9 }
-  lst <- c("kb","gb","mb","b","g","m","k")
-  tot1 <- suck.num.from.txt(tot1)
-  tot2 <- (as.numeric(tot1)*mult)/10^9 ; 
-  if(!GB) { tot2 <- tot2/10^3 }
-  return(tot2)
-}
-
-
-  
-## bit of a mess  - give it a  goo!!
-# useful for package prep, but a pain with 'quotes'
-rox.args <- function(txt,PRE=T,POST=T,author="Nicholas Cooper") {
-  # must change (")s to (')
-  tspl <- strsplit(txt,",",fixed=T)  
-  tspl2 <- sapply(tspl,strsplit,split="=",fixed=T)
-  pars <- sapply(tspl2,"[",1)
-  pars <- rmv.spc(pars)
-  pars <- paste("#' @param ",pars,"\n",sep="")
-  pre <- paste("#' title\n#' \n#' description ...\n#' ...\n#' ...\n")
-  post <- paste("#' @export\n#' @seealso ...\n#' @author",author,"\n#' @examples\n#' ...\n#' ...\n")
-  if(PRE) { cat(pre) }
-  cat(pars,sep="")
-  if(POST) { cat(post) }
-}
-
 
 
 #' Generate a test matrix of random data
@@ -1420,7 +924,10 @@ rox.args <- function(txt,PRE=T,POST=T,author="Nicholas Cooper") {
 #' automated row and column names (which might resemble labels for a SNP analysis)
 #' and return of several different formats, matrix, data.frame or big.matrix.
 #' You can specify the randomisation function (e.g, rnorm, runif, etc), as well
-#' as parameters determining the matrix size.
+#' as parameters determining the matrix size. Can also generate big.matrix objects,
+#' and an important feature is that the method to generate big.matrix objects is
+#' scalable so that very large matrices for simulation can be generated only limited
+#' by disk space and not by RAM.
 #' @param size 10^size is the total number of datapoints simulated. 6 or less are fairly quick to generate,
 #'  while 7 takes a few seconds. 8 will take under a minute, 9 around ten minutes, 10, perhaps over an hour.
 #'  Values are coerced to the range of integers c(2:10).
@@ -1457,9 +964,11 @@ generate.test.matrix <- function(size=5,row.exp=2,rand=rnorm,dimnames=T,data.fra
   if(big.matrix) {
     if(test.size>7) { if(is.null(file.name)) { file.name="big_test" } }
     # automatically extract the path if one is included in file.name
-    if(dirname(file.name)!=".") { pth <- dirname(file.name); file.name <- basename(file.name) } else { pth <- NULL}
-    bck <- cat.path(fn=file.name,suf="bck")
-    descr <- cat.path(fn=file.name,suf="descr")
+    if(!is.null(file.name)) {
+      if(dirname(file.name)!=".") { pth <- dirname(file.name); file.name <- basename(file.name) } else { pth <- NULL}
+      bck <- cat.path(fn=file.name,ext="bck")
+      descr <- cat.path(fn=file.name,ext="dsc")
+    } else { bck <- descr <- NULL }
     if(test.size>7) {
      M <- big.matrix(nrow=nr,ncol=nc,backingfile=bck,descriptorfile=descr,dimnames=dnn,backingpath=pth)
      if(nr>nc) {
@@ -1794,8 +1303,8 @@ import.big.data <- function(input.fn=NULL, dir=getwd(), long=F, rows.fn=NULL, co
     divs <- round(divs)
   }
   # use 'pref' as the name of the big.matrix backing files for this cohort
-  bck.fn <- paste(pref,"bckfile",sep="")
-  des.fn <- paste(pref,"descrFile",sep="")
+  bck.fn <- paste(pref,"bck",sep=".")
+  des.fn <- paste(pref,"dsc",sep=".")
   ### DELETE EXISTING FILE IF HAS SAME NAME ###
   if ((!des.fn %in% list.files(dir$big)) | delete.existing )
   {
@@ -1956,29 +1465,28 @@ import.big.data <- function(input.fn=NULL, dir=getwd(), long=F, rows.fn=NULL, co
 }
 
 
-# mean replacement code not used at this stage
+# mean replacement code internal
 row.rep <- function(X) { X[is.na(X)] <- mean(X,na.rm=T); X }
 
 
 #internal, analog from plumbCNV
-
-select.col.row.custom <- function(bigMat,row,col)
+select.col.row.custom <- function(bigMat,row,col,verbose=T)
 {
   # based on files/vectors of row-ids and column-ids create selection
   # vectors to select only the ids in these lists for a matrix
-  cat(" calculating selections for rows\n")
+  if(verbose) { cat(" calculating selections for rows\n") }
   # try to detect whether a vector of IDs, or file names
   row.ref <- rownames(bigMat)  ; col.ref <- colnames(bigMat) 
   row.sel <- col.sel <- NULL
   byname <- T
   if (length(row)==1 & length(col)==1 & is.character(row) & is.character(col))
   {
-    cat(" [assuming 'col' and 'row' are file names containing column and row ids]")
+    if(verbose) { cat(" [assuming 'col' and 'row' are file names containing column and row ids]") }
     if(file.exists(row)) {
       row.sel <- readLines(row)
     } else {
       if(row=="") {
-        cat(c(" row subset file was empty, selecting all\n"))
+        if(verbose) { cat(c(" row subset file was empty, selecting all\n")) }
         row.sel <- row.ref
       } else {
         stop("Error: argument 'row' should be a vector of rows names length>1 or a filename with a list of rows (no header)")
@@ -1988,7 +1496,7 @@ select.col.row.custom <- function(bigMat,row,col)
       col.sel <- readLines(col)
     } else {
       if(col=="") {
-        cat(c(" column subset file was empty, selecting all\n"))
+        if(verbose) { cat(c(" column subset file was empty, selecting all\n")) }
         col.sel <- col.ref
       } else {
         stop("Error: argument 'col' should be a vector of column names length>1 or a filename with a list of rows (no header)")
@@ -2038,40 +1546,146 @@ select.col.row.custom <- function(bigMat,row,col)
 }
 
 
-### HERE!!!
-thin <- function(X,keep=0.05,how=c("uniform","correlation","pca","association"),dir="",rows=T,pref="thin",verbose=T,...) {
-    how <- toupper(substr(how[1],1,2))
+#' Reduce one dimension of a large matrix in a strategic way
+#' 
+#' Thin the rows (or columns) of a large matrix or big.matrix in order to reduce the size of the
+#' dataset while retaining important information. Percentage of the original size or a new number 
+#' of rows/columns is selectable, and then there are four methods to choose the data subset.
+#' Simple uniform and random selection can be specified. Other methods look at the correlation
+#' structure of a subset of the data to derive non-arbitrary selections, using correlation, PCA,
+#' or association with phenotype or some other categorical variable. Each of the four methods
+#' has a separate function in this package, which you can see for more information, this function
+#' is merely a wrapper to select one of the four.
+#' @param bigMat a big.matrix object, or any argument accepted by getBigMat(), which includes
+#'  paths to description files or even a standard matrix object.
+#' @param keep numeric, by default a proportion (decimal) of the original number of rows/columns to choose
+#'  for the subset. Otherwise if an integer>2 then will assume this is the size of the desired subset,
+#'  e.g, for a dataset with 10,000 rows where you want a subset size of 1,000 you could set 'keep' as
+#'  either 0.1 or 1000.
+#' @param how character, only the first two characters are required and they are not case sensitive,
+#'  select what method to use to perform subset selection, options are:
+#' 'uniform': evenly spaced selection when random=FALSE, or random selection otherwise;
+#'  see uniform.select().
+#' 'correlation': most correlated subset when hi.cor=TRUE, least correlated otherwise;
+#'  see subcor.select().
+#' 'pca': most representative variables of the principle components of a subset;
+#'  see subpc.select().
+#' 'association': most correlated subset with phenotype if least=FALSE, or least correlated otherwise;
+#'  see select.least.assoc().
+#' @param dir directory containing the filebacked.big.matrix, same as 'dir' for getBigMat.
+#' @param rows logical, whether to choose a subset of rows (TRUE), or columns (FALSE). rows is always
+#'  TRUE when using 'association' methods.
+#' @param random logical, whether to use random selections and subsets (TRUE), or whether to use uniform
+#'  selections that should give the same result each time for the same dataset (FALSE)
+#' @param hi.cor logical, if using 'correlation' methods, then whether to choose the most correlated (TRUE)
+#'  or least correlated (FALSE).
+#' @param least logical, if using 'association' methods, whether to choose the least associated (TRUE) or 
+#'  most associated variables with phenotype
+#' @param pref character, a prefix for big.matrix backing files generated by this selection
+#' @param verbose logical, whether to display more information about processing
+#' @param ret.obj logical, whether to return the result as a big.matrix object (TRUE), or as a reference
+#'  to the binary file containing the big.matrix.descriptor object [either can be read with getBigMat() or
+#'  print.big.matrix()]
+#' @param ... other arguments to be passed to uniform.select, subpc.select, subcor.select, or select.least.assoc
+#' @export
+#' @seealso uniform.select, subpc.select, subcor.select, select.least.assoc, big.select, getBigMat
+#' @author Nicholas Cooper 
+#' @examples
+#' bmat <- generate.test.matrix(5,big.matrix=T)
+#' print.big.matrix(bmat)
+#' # make 5% random selection:
+#' lmat <- thin(bmat)
+#' print.big.matrix(lmat)
+#' # make 10% most orthogonal selection (lowest correlations):
+#' lmat <- thin(bmat,.10,"cor",hi.cor=F)
+#' print.big.matrix(lmat)
+#' # make 10% most representative selection:
+#' lmat <- thin(bmat,.10,"PCA",ret.obj=F) # return file name instead of object
+#' print(lmat)
+#' print.big.matrix(lmat)
+#' # make 25% selection most correlated to phenotype
+#' # create random phenotype variable
+#' pheno <- rep(1,ncol(bmat)); pheno[which(runif(ncol(bmat))<.5)] <- 2
+#' lmat <- thin(bmat,.25,"assoc",phenotype=pheno,least=F,verbose=T)
+#' print.big.matrix(lmat)
+#' # tidy up temporary files:
+#' unlink(c("thin.bck","thin.dsc","thin.RData"))
+thin <- function(bigMat,keep=0.05,how=c("uniform","correlation","pca","association"),dir="",rows=T,random=T,hi.cor=T,least=T,pref="thin",verbose=F,ret.obj=T,...) {
+    how <- toupper(substr(how[1],1,2)); meth <- "none"
+    if(is.character(dir)) { if(dir=="") { dir <- getwd() } } else { dir <- getwd() }
     if(how=="UN") {
-      rc <- uniform.select(X,keep=keep,dir=dir,rows=rows,...)
+      meth <- "uniform"
+      rc <- uniform.select(bigMat,keep=keep,dir=dir,rows=rows,random=random,...)
       if(rows) { subrc <- rc[[1]] } else { subrc <- rc[[2]] }
     }
     if(how=="CO") {
-      subrc <- subcor.select(X,keep=keep,dir=dir,rows=rows,...)
+      meth <- "correlation"
+      #hi.cor is the extra parameter for this
+      subrc <- subcor.select(bigMat,keep=keep,dir=dir,rows=rows,random=random,hi.cor=hi.cor,...)
     }
     if(how=="PC") {
-      subrc <- subpc.select(X,keep=keep,dir=dir,rows=rows,...)
+      meth <- "pca"
+      subrc <- subpc.select(bigMat,keep=keep,dir=dir,rows=rows,random=random,...)
     }
     if(how=="AS") {
+      meth <- "association"
       rows <- T
+      #least is the extra parameter for this
       test.args <- list(...)
       if(!"phenotype" %in% names(test.args)) { stop("must include argument 'phenotype' when how='association'") }
-      subrc <- select.least.assoc(X,keep=keep,dir=dir,...)
+      subrc <- select.least.assoc(bigMat,keep=keep,dir=dir,verbose=verbose,least=least,...)
     }
-    catdb(subrc)
-    if(rows) { sr <- subrc; sc <- 1:ncol(X) } else { sr <- 1:nrow(X); sc <- subrc }
-    bigSubMat <- big.select(X, select.rows=sr, select.cols=sc, dir=dir, 
-                           deepC=T, pref=pref, verbose=verbose )
-    return(bigSubMat)
+    #catdb(subrc)
+    if(meth=="none") { stop("invalid subsetting method (",how,") specified") }
+    if(rows) { sr <- subrc; sc <- 1:ncol(bigMat) } else { sr <- 1:nrow(bigMat); sc <- subrc }
+    bigSubMat <- big.select(bigMat, select.rows=sr, select.cols=sc, dir=dir, 
+                           deepC=T, pref=pref, verbose=verbose , delete.existing=T)
+    if(ret.obj) {
+      return(getBigMat(bigSubMat))
+    } else {
+      return(bigSubMat)
+    }
 }
 
 
 
 
-#' basically a big wrapper for deep copy, making sure you do it all right and
-#' managing the file names
-#' @param select.rows can be numbers, logical, names, or a file with names
-big.select <- function(des.fn, select.rows=NULL, select.cols=NULL, dir=getwd(), 
-                       deepC=T, pref="thin", verbose=T )
+#' Select a subset of a big.matrix
+#' 
+#' Select a subset of big.matrix using indexes for a subset of rows and columns.
+#' Essentially a wrapper for bigmemory::deepcopy, but with slightly more flexible
+#' parameters. bigMat can be entered in any form accepted by getBigMat(), row and
+#' column selections can be vectors of indexes, names or file.names containing indexes.
+#' Default is to process using deepcopy, but processing without using bigmemory native
+#' methods is a faster option when matrices are small versus available RAM. File names
+#' for backing files are managed only requiring you to enter a prefix, or optionally
+#' use the default and gain filebacked functionality without having to bother choosing
+#' filename parameters.
+#' @param bigMat a big.matrix, matrix or any object accepted by getBigMat()
+#' @param select.rows selection of rows of bigMat, can be numbers, logical, rownames, or a file with names. 
+#'  If using a filename argument, must also use a filename argument for select.cols (cannot mix)
+#' @param select.cols selection of columns of bigMat, can be numbers, logical, colnames, or a file with names
+#' @param dir the directory containing the bigMat backing file (e.g, parameter for getBigMat()).
+#' @param deepC logical, whether to use bigmemory::deepcopy, which is slowish, but scalable, or 
+#'  alternatively to use standard indexing which converts the result to a regular matrix object,
+#'  and is fast, but only feasible for matrices small enough to fit in memory.
+#' @param pref character, prefix for the big.matrix backingfile and descriptorfile, and optionally
+#'  an R binary file containing a big.matrix.descriptor object pointing to the big.matrix result.
+#' @param verbose whether to display extra information about processing and progress
+#' @export
+#' @author Nicholas Cooper 
+#' @examples
+#' bmat <- generate.test.matrix(5,big.matrix=T)
+#' # take a subset of the big.matrix without using deepcopy
+#' sel <- big.select(bmat,c(1,2,8),c(2:10),deepC=F,verbose=T)
+#' print.big.matrix(sel)
+#' # now select the same subset using row/column names from text files
+#' writeLines(rownames(bmat)[c(1,2,8)],con="bigrowstemp.txt")
+#' writeLines(colnames(bmat)[c(2:10)],con="bigcolstemp.txt")
+#' sel <- big.select(bmat, "bigrowstemp.txt","bigcolstemp.txt", delete.existing=TRUE)
+#' print.big.matrix(sel)
+big.select <- function(bigMat, select.rows=NULL, select.cols=NULL, dir=getwd(), 
+                       deepC=T, pref="sel", delete.existing=F, verbose=F)
 {
   # sort and exclude snps/samples from a big.matrix
   if(exists("validate.dir.for",mode="function")) {
@@ -2082,16 +1696,16 @@ big.select <- function(des.fn, select.rows=NULL, select.cols=NULL, dir=getwd(),
     dir <- list(big=dir,pc=dir)
   }
   # bigmatrix file names for re-ordered filtered matrix (which is the final output of this script)
-  if(is.character(des.fn) & length(des.fn)==1) { Fn <- gsub("descrFile","",des.fn) } else { Fn <- "" }
-  bck.fn.o <- cat.path(fn=Fn,pref=pref,suf="bckfile")
-  des.fn.o <- cat.path(fn=Fn,pref=pref,suf="descrFile")
-  R.descr <- cat.path(dir$big,des.fn.o,ext=".RData")
+  if(is.character(bigMat) & length(bigMat)==1) { Fn <- gsub("descrFile","",bigMat) } else { Fn <- "" }
+  bck.fn.o <- cat.path(fn=Fn,pref=pref,ext="bck")
+  des.fn.o <- cat.path(fn=Fn,pref=pref,ext="dsc")
+  R.descr <- cat.path(dir$big,rmv.ext(des.fn.o),ext=".RData"); print(rmv.ext(des.fn.o))
   
-  bigMat <- getBigMat(des.fn,dir)
+  bigMat <- getBigMat(bigMat,dir)
   if(verbose) { cat(paste(" attached matrix with dims:",paste(dim(bigMat),collapse=","),"\n")) }
   # get list of deleting/reordering vectors using annotation files
-  trans.list <- select.col.row.custom(bigMat,row=select.rows,col=select.cols)
-  if(verbose) { cat(paste(" selected",length(trans.list[[4]]),"listed samples and",length(trans.list[[3]]),"variables\n")) }
+  trans.list <- select.col.row.custom(bigMat,row=select.rows,col=select.cols,verbose=verbose)
+  if(verbose) { cat(paste(" selected",length(trans.list[[2]]),"listed samples and",length(trans.list[[1]]),"variables\n")) }
   wrn <- "trans.list was already attached, detaching now..\n"
   while("trans.list" %in% search()) { detach(trans.list); warning(wrn) }
   attach(trans.list)
@@ -2115,16 +1729,33 @@ big.select <- function(des.fn, select.rows=NULL, select.cols=NULL, dir=getwd(),
       cat(" adding rownames\n") ; rownames(bigMat1) <- rownames(bigMat)[to.order.r] 
       cat(" converting matrix to big.matrix\n") 
     }
-    bigMat2 <- as.big.matrix(bigMat1, backingfile=bck.fn.o,
-                             backingpath=dir$big, descriptorfile=des.fn.o)
+    bigMat2 <- as.big.matrix(bigMat1, backingfile=basename(bck.fn.o),
+                             descriptorfile=basename(des.fn.o),backingpath=dir$big)
     if(verbose) { cat(paste(" matrix descr saved as standard description file:",des.fn.o,"\n")) }
     descr <- describe(bigMat2)
   } else {
     #this is slow but creates backing file and will speed up ops later
+      ### DELETE EXISTING FILE IF HAS SAME NAME ###
+      if ((!basename(des.fn.o) %in% list.files(dir$big)) | delete.existing )
+      {
+        if(delete.existing & (basename(des.fn.o) %in% list.files(dir$big)))
+        {
+          dfn <- cat.path(dir$big,basename(des.fn.o))
+          cat("\n deleting",dfn,"\n")
+          unlink(dfn)
+        } else {
+          #all clear, no files already exist with same name
+        }
+      } else {
+        cat(paste("\nWarning: Big matrix description file",basename(des.fn.o),"already exists in",dir$big,"\n"))
+        cat("You may wish to delete, rename or move this file, or use option 'delete.existing'=T, before re-running this script\n")
+        #stop()
+      }
     if(verbose) { cat(" starting deep copy...") }
     bigMat2 <- deepcopy(bigMat, cols = to.order.c, rows = to.order.r,
-                        backingfile=bck.fn.o,backingpath=dir$big, descriptorfile=des.fn.o )
-    cat("done\n")
+                        backingfile=basename(bck.fn.o),backingpath=dir$big,
+                        descriptorfile=basename(des.fn.o) )
+    if(verbose) { cat("done\n") }
     if(verbose) { cat("\nAdding names\n") }
     options(bigmemory.allow.dimnames=TRUE)
     colnames(bigMat2) <- colnames(bigMat)[to.order.c]
@@ -2176,18 +1807,17 @@ big.select <- function(des.fn, select.rows=NULL, select.cols=NULL, dir=getwd(),
 #' @param ... further parameters to pass to big.PCA() which performs the subset PCA used to 
 #'  determine the most representative rows (or columns).
 #' @export
-#' @seealso uniform.select, big.PCA, getBigMat
+#' @seealso thin, uniform.select, big.PCA, getBigMat
 #' @author Nicholas Cooper 
 #' @examples
-#' mat <- matrix(rnorm(200*2000),ncol=200)
-#' bmat <- as.big.matrix(mat)
+#' mat <- matrix(rnorm(200*2000),ncol=200) # normal matrix
+#' bmat <- as.big.matrix(mat)              # big matrix
 #' ii <- subpc.select(bmat,.05,rows=TRUE) # thin down to 5% of the rows
 #' ii <- subpc.select(bmat,45,rows=FALSE) # thin down to 45 columns
 #' # show that rows=T is equivalent to rows=F of the transpose (random must be FALSE)
 #' ii1 <- subpc.select(mat,.4,rows=TRUE,random=FALSE)
 #' ii2 <- subpc.select(t(mat),.4,rows=FALSE,random=FALSE)
 #' print(all.equal(ii1,ii2))
-
 subpc.select <- function(bigMat,keep=.05,rows=TRUE,dir=getwd(),random=TRUE,ram.gb=0.1,...) {  
   # select a subset of variables based on the most representative variables in the PCs of a subset
   bigMat <- getBigMat(bigMat,dir=dir)
@@ -2240,8 +1870,6 @@ subpc.select <- function(bigMat,keep=.05,rows=TRUE,dir=getwd(),random=TRUE,ram.g
   selected <- logical(ncol(cormat)) # number of variables long logical
   new.set <- NULL
   vpc <- varpcs[1:el]/sum(varpcs[1:el]) # to prevent vagaries of roundoff error
-#  return(vpc)
-#  
   # make sure total number to choose will be exactly right
   if(random) {
     per.pc <- round(new.n*vpc)
@@ -2265,8 +1893,44 @@ subpc.select <- function(bigMat,keep=.05,rows=TRUE,dir=getwd(),random=TRUE,ram.g
 }  
 
 
-
-subcor.select <- function(bigMat,keep=.05,rows=TRUE,hi.cor=T,dir=getwd(),random=TRUE,ram.gb=0.1,...) {  
+#' Selection of the most correlated variable subset
+#' 
+#' Returns a subset (size='keep') of row or column numbers that are most correlated to other
+#' variables in the dataset (or if hi.cor=F), then those that are least correlated.
+#' This function performs cor() on a small subset of columns and all rows (when rows=TRUE, or vice
+#'  -versa when rows=FALSE), and selects rows (rows=TRUE) with greatest/least absolute sum of correlations.
+#' @param bigMat a big.matrix, matrix or any object accepted by getBigMat()
+#' @param keep numeric, by default a proportion (decimal) of the original number of rows/columns to choose
+#'  for the subset. Otherwise if an integer>2 then will assume this is the size of the desired subset,
+#'  e.g, for a dataset with 10,000 rows where you want a subset size of 1,000 you could set 'keep' as
+#'  either 0.1 or 1000.
+#' @param rows logical, whether the subset should be of the rows of bigMat. If rows=FALSE, then 
+#'  the subset is chosen from columns, would be equivalent to calling subpc.select(t(bigMat)),
+#'  but avoids actually performing the transpose which can save time for large matrices.
+#' @param hi.cor logical, whether to choose the most correlated (TRUE) or least correlated subset (FALSE).
+#' @param dir the directory containing the bigMat backing file (e.g, parameter for getBigMat()).
+#' @param random logical, passed to uniform.select(), whether to take a random or uniform selection
+#'  of columns (or rows if rows=F) to run the subset PCA.
+#' @param ram.gb maximum size of the matrix in gigabytes for the subset PCA, 0.1GB is the default 
+#'  which should result in minimal processing time on a typical system. Increasing this
+#'  increases the processing time, but also the representativeness of the subset chosen. Note
+#'  that some very large matrices will not be able to be processed by this function unless 
+#'  this parameter is increased; basically if the dimension being thinned is more than 5% of
+#'  this memory limit (see estimate.memory() from NCmisc).
+#' @export
+#' @seealso thin, uniform.select, getBigMat
+#' @author Nicholas Cooper 
+#' @examples
+#' mat <- matrix(rnorm(200*2000),ncol=200)
+#' bmat <- as.big.matrix(mat)
+#' ii1 <- subcor.select(bmat,.05,rows=TRUE) # thin down to 5% of the rows
+#' ii2 <- subcor.select(bmat,45,rows=FALSE) # thin down to 45 columns
+#' catdb(ii1,ii2)
+#' # show that rows=T is equivalent to rows=F of the transpose (random must be FALSE)
+#' ii1 <- subcor.select(mat,.4,rows=TRUE,random=FALSE)
+#' ii2 <- subcor.select(t(mat),.4,rows=FALSE,random=FALSE)
+#' print(all.equal(ii1,ii2))
+subcor.select <- function(bigMat,keep=.05,rows=TRUE,hi.cor=T,dir=getwd(),random=TRUE,ram.gb=0.1) {  
   # select a subset of variables based on the most representative variables in the PCs of a subset
   if(rows) { N <- nrow(bigMat) } else { N <- ncol(bigMat) }
   if(keep>2) {
@@ -2336,10 +2000,11 @@ subcor.select <- function(bigMat,keep=.05,rows=TRUE,hi.cor=T,dir=getwd(),random=
 #' @seealso subpc.select
 #' @author Nicholas Cooper 
 #' @examples
-#' mat <- matrix(rnorm(200*100),ncol=200)
-#' bmat <- as.big.matrix(mat)
-#' ii <- uniform.select(bmat,.05,rows=TRUE) # thin down to 5% of the rows
-#' ii <- uniform.select(bmat,45,rows=FALSE,random=TRUE) # thin down to 45 columns
+#' mat <- matrix(rnorm(200*100),ncol=200)  # standard matrix
+#' bmat <- as.big.matrix(mat)              # big.matrix
+#' ii1 <- uniform.select(bmat,.05,rows=TRUE) # thin down to 5% of the rows
+#' ii2 <- uniform.select(bmat,45,rows=FALSE,random=TRUE) # thin down to 45 columns
+#' catdb(ii1,ii2)
 ## tailor this to make a random uniform selection
 uniform.select <- function(bigMat,keep=.05,rows=TRUE,dir="",random=TRUE,ram.gb=0.1) {  
   # select an exactly evenly spaced subset (reproduceable)
@@ -2366,21 +2031,6 @@ uniform.select <- function(bigMat,keep=.05,rows=TRUE,dir="",random=TRUE,ram.gb=0
 }
 
 
-#mat <- matrix(rnorm(10*40000),ncol=200)
-#system.time(big.PCA(mat))
-## other selection methods ##
-# mini pca, and take those most correlated with PCs (weighted by var.pc)
-# do PCA on max data size that will be quick
-# choose quick elbow and take thos components as starting point
-# choose 'n' for each components corresponding to % of variance
-# select n top/bottom loading variables (remove each at a time so no double ups) from prelim pcs to
-#  make up desired number of vars
-# correlation matrix, those most correlated with other measures on mini version
-# those most correlated with a difference in phenotypes on mini version, get from corina meth
-# those least correlated with a difference in phenotypes on mini version, get from corina meth
-
-## HERE!!
-
 #' Quick association tests for phenotype
 #' 
 #' Simplistic association tests, only meant for purposes of preliminary variable
@@ -2403,7 +2053,7 @@ uniform.select <- function(bigMat,keep=.05,rows=TRUE,dir="",random=TRUE,ram.gb=0
 #' @seealso getBigMat
 #' @author Nicholas Cooper 
 #' @examples
-#' bmat <- generate.test.matrix(5,dim.dif=2,big.matrix=T)
+#' bmat <- generate.test.matrix(5,big.matrix=T)
 #' pheno <- rep(1,ncol(bmat)); pheno[which(runif(ncol(bmat))<.5)] <- 2
 #' ids <- colnames(bmat); samp.inf <- data.frame(phenotype=pheno); rownames(samp.inf) <- ids
 #' both <- quick.pheno.assocs(bmat,samp.inf); catdb(both)
@@ -2416,7 +2066,7 @@ quick.pheno.assocs <- function(bigMat,sample.info=NULL,use.col="phenotype",dir="
   # create list of bigMatrix locations
   # go 'N' snps at time, concatenate into 1 file, run regression assocs
   # for 2 phenotypes/grps gives t values - ordinally equivalent to logistic regression with 2 groups
-  if(!all(c(use.col) %in% colnames(sample.info))) { stop(paste("sample.info was invalid for association tests, need",use.col,"column")) }
+  if(!all(c(use.col) %in% colnames(sample.info))) { stop(paste("sample.info was invalid for association tests, need ",use.col," column")) }
   if(verbose) {
     cat(" running row-wise tests against",use.col,"to filter most associated\n")
   }
@@ -2430,10 +2080,12 @@ quick.pheno.assocs <- function(bigMat,sample.info=NULL,use.col="phenotype",dir="
   if(length(cutt)>0) {  sample.info <- sample.info[-cutt,,drop=F]  }
   if(ncol(bigMat)!=nrow(sample.info)) { 
     n.mis <- length(which(colnames(bigMat) %in% rownames(sample.info)))
-    warning(n.mis,"samples in BigMat were not in sample.info [failure likely]")
+    warning(n.mis," samples in BigMat were not in sample.info [failure likely]")
   }
   ## determine test to use based on number of phenotypes ##
-  n.phenos <- length(table(sample.info[[use.col]],useNA=NULL))
+  n.phenos <- length(table(sample.info[[paste(use.col)]],useNA=NULL))
+  #si <- table(sample.info[[paste(use.col)]],useNA=NULL)
+  #catdb(si,use.col,sample.info)
   t.type <- "single"
   if(n.phenos==2) { t.type <- "t.test"}
   if(n.phenos>2) { t.type <- "anova"}
@@ -2443,7 +2095,7 @@ quick.pheno.assocs <- function(bigMat,sample.info=NULL,use.col="phenotype",dir="
   three.test <- function(col,pheno) { return(summary(aov(col~pheno))[[1]][["F value"]][1]) }
   two.test <- function(col,pheno) { return((cor.test(col,pheno)$statistic)^2)  }
   ph.test <- switch(t.type,anova=three.test,t.test=two.test,single=NULL)
-  if(is.null(ph.test)) { stop("Error: used option for association test by",use.col,"but there is only 1 type in file")}
+  if(is.null(ph.test)) { stop("Error: used option for association test by ",use.col," but there is only 1 type in file")}
   row.labels <- rownames(bigMat)
   full.size <- length(row.labels)
   good.mem.lim <- 10^7 # allows fast processing at this limit
@@ -2530,10 +2182,13 @@ quick.pheno.assocs <- function(bigMat,sample.info=NULL,use.col="phenotype",dir="
 #' @seealso quick.pheno.assocs
 #' @author Nicholas Cooper 
 #' @examples
-#' bmat <- generate.test.matrix(5,dim.dif=2,big.matrix=T)
-#' cor(bmat[select.least.assoc(bmat,sample.info=samp.inf,least=F),][1,],samp.inf[[1]])
-#' cor(bmat[select.least.assoc(bmat,sample.info=samp.inf,least=F),][2,],samp.inf[[1]])
-select.least.assoc <- function(bigMat,keep=.05,phenotype=NULL,least=T,dir="",n.cores=1)
+#' bmat <- generate.test.matrix(5,big.matrix=T)
+#' pheno <- rep(1,ncol(bmat)); pheno[which(runif(ncol(bmat))<.5)] <- 2
+#' most.correl <- select.least.assoc(bmat,phenotype=pheno,least=F)
+#' least.correl <- select.least.assoc(bmat,phenotype=pheno,least=T)
+#' cor(bmat[least.correl,][1,],pheno)  # least correlated
+#' cor(bmat[most.correl,][1,],pheno)  # most correlated
+select.least.assoc <- function(bigMat,keep=.05,phenotype=NULL,least=T,dir="",n.cores=1,verbose=T)
 {
   # select a subset of variables based on the most representative variables in the PCs of a subset
   bigMat <- getBigMat(bigMat,dir=dir)
@@ -2543,20 +2198,28 @@ select.least.assoc <- function(bigMat,keep=.05,phenotype=NULL,least=T,dir="",n.c
   } else {
     new.n <- round(max(0,min(1,keep))*N)
   }
+  if(is.null(colnames(bigMat)) | is.null(rownames(bigMat)) ) {
+    options(bigmemory.allow.dimnames=TRUE)
+    if(is.null(colnames(bigMat))) { colnames(bigMat) <- paste("c",1:ncol(bigMat),sep="") }
+    if(is.null(rownames(bigMat))) { rownames(bigMat) <- paste("r",1:nrow(bigMat),sep="") }
+  }
   if(length(phenotype)!=ncol(bigMat)) { stop("phenotype must be the same length as ncol(bigMat)") }
   sample.info <- data.frame(phenotype=phenotype); rownames(sample.info) <- colnames(bigMat)
   ##association version of selecting subset of snps for PCA
   # takes the 'pc.to.keep'% least associated with #sample.info$phenotype'
-  myPs <- quick.pheno.assocs(bigMat=bigMat,sample.info=sample.info,dir=dir,F.values=F,n.cores=n.cores)
+  myPs <- quick.pheno.assocs(bigMat=bigMat,sample.info=sample.info,
+                             dir=dir,F.values=F,n.cores=n.cores,verbose=verbose)
   rank <- order(myPs)
   if(least) { rank <- rev(rank) }
-  cat("\nsummary of p-values for association tests\n"); print(summary(myPs))
+  if(verbose) {
+    #cat("\nsummary of p-values for association tests\n"); print(summary(myPs))
+  }
   kept.snps <- rank[1:new.n]
-  return(kept.snps)
+  return(sort(kept.snps))
 }
 
 
-
+# internal function
 cut.fac <- function(N,n.grps,start.zero=F,factor=T) {
   X <- findInterval(((1:N)/(N/n.grps)), 1:n.grps, all.inside=F, rightmost.closed=T)+as.numeric(!start.zero)
   #X <- cut(1:N,n.grps,labels=F)
@@ -2584,7 +2247,7 @@ cut.fac <- function(N,n.grps,start.zero=F,factor=T) {
 #'  used directly. Apart from reducing processing time, this can also reduce storage/RAM burden for 
 #'  the resulting matrix. Set to NA, or a number >= min(dim(bigMat)) in order to keep all PCs.
 #' @param thin decimal, percentage of the original number of rows you want to thin the matrix to.
-#'  If wanting to thin by columns, then use ... arguments for thin.big.mat. 
+#'  see function thin() for details of how this can be done, pass arguments to thin() using ...
 #'  Even though this PCA function uses mainly 'big.matrix' native methods, there is a step where the
 #'  matrix must be stored fully in memory, so this limits the size of what matrix can be processed,
 #'  depending on RAM limits. If you want to conduct PCA/SVD on a matrix larger than RAM you can thin
@@ -2606,35 +2269,72 @@ cut.fac <- function(N,n.grps,start.zero=F,factor=T) {
 #' @param save.pcs whether to save the principle component matrix and eigenvalues to a binary file with name pcs.fn
 #' @param pcs.fn name of the binary when save.pcs=TRUE
 #' @param verbose whether to display detailed progress of the PCA
+#' @param ... if thin is TRUE, then these should be any additional arguments for thin(), e.g, 'keep', 'how', etc.
 #' @export
 #' @seealso getBigMat, LRR.PCA.correct
 #' @author Nicholas Cooper
 #' @examples
 ## Demonstrate PCA versus SVD ##
+#' # create an example matrix and its transpose
 #' min.dim <- 200; nvar <- 500; subset.size <- 50
-#' mat <- matrix(rnorm(min.dim*nvar),ncol=min.dim) # mat <- t(crimtab)
+#' mat <- matrix(rnorm(min.dim*nvar),ncol=min.dim) 
+#' print.large(mat)
 #' t.mat <- t(mat)
+#' # create two alternative covariance matrices
 #' MMs <- t.mat %*% mat
 #' MsM <- mat %*% t.mat
-#' print.large(mat)
-#' pca <- svd(mat) #,nv=subset.size,nu=0)
-#' D <- pca$d
-#' sig <- mat-mat; sig <- t.mat-t.mat; diag(sig) <- D
-#' V <- pca$v
-#' U <- pca$u
+#' # run singular value decomposition
+#' pca <- svd(mat)   
+#' D <- pca$d # singular values (=sqrt(eigenvalues))
+#' V <- pca$v # right singular vector
+#' U <- pca$u # left singular vector
+#' sig <- mat-mat; diag(sig) <- D; 
 #' MMs2 <- V %*% (t(sig) %*% sig) %*% t(V)
+#' sig <- t.mat-t.mat; diag(sig) <- D; 
 #' MsM2 <- U %*% (sig %*% t(sig)) %*% t(U)
+#' # show that the covariance matrices are equal to the functions of the left and right singular vectors
+#' catdb(MMs,MsM); catdb(MMs2,MsM2)
 #' pr <- princomp(mat) # PCA using eigendecomposition of cov matrix
 #' L <- matrix(rep(0,40000),ncol=200); diag(L) <- pr[[1]]^2 # eigenvalues as diag
-#' mat2 <- (pr[[2]]) %*% L %*%  solve(pr[[2]]) # eigenvecs * eigenvals * inv(eigenvecs)
-#' print.large(cov(mat)); print.large(mat2) #  == COVmat
-#' median(abs(diag(cor(V,pr[["loadings"]])))); median(abs(diag(cor(U,pr[["scores"]]))))
-#' cor(pr$sdev,D)
+#' mat2 <- (pr[[2]]) %*% L %*%  solve(pr[[2]]) # = eigenvectors * eigenvalues * inv(eigenvectors)
+#' print.large(cov(mat)); print.large(mat2) #  == COVmat (may be slight tolerance differences)
+#' ## Now demonstrate the correlation between SVD and PCA ##
+#' # the right singular vector is highly correlated with the pca loadings:
+#' median(abs(diag(cor(V,pr[["loadings"]]))))
+#' # the left singular vector is highly correlated with the pca scores (eigenvectors):
+#' median(abs(diag(cor(U,pr[["scores"]]))))
+#' cor(pr$sdev,D) # the singular values are equivalent to the eigenvalues
 #' bmat <- as.big.matrix(mat)
 #' result <- big.PCA(bmat,verbose=T)
-#' pca.scree.plot(result$Evalues,M=bmat,add.fit.line=T,elbow=40,linear=F,ylim=c(0,1400),n.xax=200)
-#' pca.scree.plot(result$Evalues,M=bmat,add.fit.line=T,elbow=13)
-big.PCA <- function(bigMat,dir=getwd(),pcs.to.keep=50,thin=F,SVD=T,LAP=F,center=T,save.pcs=F,use.bigalgebra=T,pcs.fn="PCsEVsFromPCA.RData",verbose=F) 
+#' headl(result)
+#' # plot the eigenvalues with a linear fit line and elbow placed at 13
+#' Eigv <- pca.scree.plot(result$Evalues,M=bmat,elbow=6,printvar=F)
+#' ##  generate some data with reasonable intercorrelations ##
+#' mat2 <- sim.cor(500,200,genr=function(n){ (runif(n)/2+.5) })
+#' bmat2 <- as.big.matrix(mat2)
+#' # calculate PCA on decreasing subset size 
+#' result2 <- big.PCA(bmat2,thin=FALSE)
+#' result3 <- big.PCA(bmat2,thin=TRUE,keep=.5)
+#' result4 <- big.PCA(bmat2,thin=TRUE,keep=.5,how="cor")
+#' result5 <- big.PCA(bmat2,thin=TRUE,keep=.5,how="pca")
+#' result6 <- big.PCA(bmat2,thin=TRUE,keep=.2)
+#' normal <- result2$PCs
+#' thinned <- result3$PCs
+#' corred <- result4$PCs
+#' pced <- result5$PCs
+#' thinner <- result6$PCs
+#' ## correlate the resulting PCs with the un-thinned PCs
+#' cors.thin.with.orig <- apply(cor(normal,thinned),1,max)
+#' cors.corred.with.orig <- apply(cor(normal,corred),1,max)
+#' cors.pced.with.orig <- apply(cor(normal,pced),1,max)
+#' cors.thinner.with.orig <-apply(cor(normal,thinner),1,max)
+#' plot(cors.thin.with.orig,type="l",col="red",ylim=c(0,1))
+#' lines(cors.thinner.with.orig,col="orange")
+#' lines(cors.corred.with.orig,col="lightblue")
+#' lines(cors.pced.with.orig,col="lightgreen")
+#' # can see that the first component is highly preserved,
+#' # and next components, somewhat preserved; try using different thinning methods
+big.PCA <- function(bigMat,dir=getwd(),pcs.to.keep=50,thin=F,SVD=T,LAP=F,center=T,save.pcs=F,use.bigalgebra=T,pcs.fn="PCsEVsFromPCA.RData",verbose=F,...) 
 {
   # run principle components analysis on the SNP subset of the LRR snp x sample matrix
   # various methods to choose from with pro/cons of speed/memory, etc.
@@ -2648,10 +2348,16 @@ big.PCA <- function(bigMat,dir=getwd(),pcs.to.keep=50,thin=F,SVD=T,LAP=F,center=
     dir <- list(big=dir,pc=dir)
   }
   #must.use.package(c("irlba"),T)
+  if(thin) {
+    catdb(bigMat)
+    bigMat <- thin(bigMat,dir=dir,...)
+    catdb(bigMat)
+  } 
   pcaMat <- getBigMat(bigMat,dir)
+  print(dim(pcaMat))
   if(verbose) { print.big.matrix(pcaMat,name="pcaMat") }
   est.mem <- estimate.memory(pcaMat)
-  if(verbose | est.mem>1.5) {
+  if(est.mem>1) {
     cat(" estimated memory required for",nrow(pcaMat),"x",ncol(pcaMat),"matrix:",round(est.mem,2),
       "GB. If this exceeds available,\n  then expect PCA to take a long time or fail!\n")
   }
@@ -2708,7 +2414,7 @@ big.PCA <- function(bigMat,dir=getwd(),pcs.to.keep=50,thin=F,SVD=T,LAP=F,center=
         if(do.fast) {
           uu <-(system.time(result <- irlba(subMat,nv=pcs.to.keep,nu=0,matmul=matmul))) 
         } else {
-          if(use.bigalgebra) { warning("[without 'bigalgebra' package, PCA runs slowly for large datasets,", 
+          if(use.bigalgebra & verbose) { warning("[without 'bigalgebra' package, PCA runs slowly for large datasets,", 
               "see 'big.algebra.install.help()']\n") }
           uu <-(system.time(result <- svd(subMat,nv=pcs.to.keep,nu=0)))
         }
@@ -2736,12 +2442,16 @@ big.PCA <- function(bigMat,dir=getwd(),pcs.to.keep=50,thin=F,SVD=T,LAP=F,center=
 }
 
 
+
+
+
 # XHMM follows the empirical rule of thumb
 # by calculating the relative variance of each component and
 # removing the K components with a value of 0.7 / n or higher,28
 # where n is the number of components (in this case, number of
 #                                      samples) and 0.7 is a user-tunable XHMM parameter. 
 
+### HERE!!!
 
 LRR.PCA.correct <- function(pca.result,bigMat,dir,num.pcs=9,n.cores=1,pref="corrected",
                             big.cor.fn=NULL,write=F,sample.info=NULL,correct.sex=F,add.int=F)
@@ -2789,8 +2499,8 @@ LRR.PCA.correct <- function(pca.result,bigMat,dir,num.pcs=9,n.cores=1,pref="corr
   # create new matrix same size, ready for corrected values
   nR <- nrow(origMat); nC <- ncol(origMat)
   cat(" creating new file backed big.matrix to store corrected data...")
-  pcCorMat <- filebacked.big.matrix(nR,nC, backingfile=paste(pref,"Bck",sep=""),
-                                    backingpath=dir$big, descriptorfile=paste(pref,"Descr",sep=""))
+  pcCorMat <- filebacked.big.matrix(nR,nC, backingfile=paste(pref,"bck",sep="."),
+                                    backingpath=dir$big, descriptorfile=paste(pref,"dsc",sep="."))
   cat("done\n")
   if(!is.filebacked(pcCorMat) | !is.filebacked(origMat)) {
     warning("at least one of the big.matrices is not filebacked, memory problems may be encountered")
@@ -2949,8 +2659,8 @@ t.big <- function(bigMat,dir=NULL,name="t.bigMat",R.descr=NULL,max.gb=NA,
   if(is.na(prog)) { if(estimate.memory(c(nR,nC))>slow.is) { prog <- T } else { prog <- F } }
   cN <- colnames(bigMat); rN <- rownames(bigMat)
   if(verbose) { cat(" creating",nC,"x",nR,"target matrix,",name,"...") }
-  des <- paste(name,"descrFile",sep="_")
-  bck <- paste(name,"bckFile",sep="_")
+  des <- paste(name,"dsc",sep=".")
+  bck <- paste(name,"bck",sep=".")
   bigTrans <- big.matrix(nrow=nC,ncol=nR, backingfile=bck,
                          backingpath=dir, descriptorfile=des)
   if(verbose) { cat("done\n"); cat("\nAdding names\n") }
