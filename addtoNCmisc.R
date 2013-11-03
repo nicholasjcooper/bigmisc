@@ -67,7 +67,6 @@ print.large <- function(largeMat,rows=3,cols=2,digits=4,rL="Row#",rlab="rownames
                   dotzh,pad(cN[nC],tail(hdr,1)))
   for (j in 1:rows) { 
     catdb(j,cols)
-    xy <- pad(RND(largeMat[j,1:cols],digits),hdr[1:cols])
     xy2 <- RND(largeMat[j,1:cols],digits)
     xy3 <- hdr[1:cols]
     xy4 <- largeMat[j,1:cols]
