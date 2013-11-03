@@ -65,6 +65,7 @@ print.large <- function(largeMat,row=3,col=2,digits=4,rL="Row#",rlab="rownames",
   linez[[1]] <- c(pad(rL,rown),pad(rlab,idln),pad(cN[c(1:col)],hdr[1:col]),
                   dotzh,pad(cN[nC],tail(hdr,1)))
   for (j in 1:row) { 
+    catdb(largeMat,j,col)
     linez[[j+1]] <- c(pad(jstr[j],rown),pad(rN[j],idln),
                       pad(RND(largeMat[j,1:col],digits),hdr[1:col]),dotz,
                       pad(RND(largeMat[j,nC],digits),tail(hdr,1)))
