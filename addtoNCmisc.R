@@ -7,8 +7,8 @@ require(tools)
 #' overloading the console. Most useful when data has row and column names.
 #'
 #' @param largeMat a matrix
-#' @param row number of rows to display
-#' @param col number of columns to display
+#' @param rows number of rows to display
+#' @param cols number of columns to display
 #' @param digits number of digits to display for numeric data
 #' @param rL row label to describe the row names/numbers, e.g, row number, ID, etc
 #' @param rlab label to describe the data rows
@@ -22,61 +22,62 @@ require(tools)
 #' rownames(mat) <- paste("ID",1:50,sep="")
 #' colnames(mat) <- paste("Var",1:20,sep="")
 #' print.large(mat)
-#' print.large(mat,row=9,col=4,digits=1,rL="#",rlab="samples",clab="variables")
-print.large <- function(largeMat,row=3,col=2,digits=4,rL="Row#",rlab="rownames",clab="colnames",rownums=T,ret=F) 
+#' print.large(mat,rows=9,cols=4,digits=1,rL="#",rlab="samples",clab="variables")
+print.large <- function(largeMat,rows=3,cols=2,digits=4,rL="Row#",rlab="rownames",clab="colnames",rownums=T,ret=F) 
 {
   # nicely print a large matrix without overloading the output space
   # can return result as lines of text instead of printing to screen (for printing to file)
   # allows customization of row and column labels
   # only worth using with data that has row/col names
+  
   if(length(dim(largeMat))!=2) { stop("expected largeMat to have 2 dimensions") }
   nC <- ncol(largeMat); nR <- nrow(largeMat); 
   if(nC<2 | nR<3) { warning("print.large only works for matrices with dims >= c(3,2), passed to print(head())")
-                    print(head(largeMat,row+1)); return(NULL) }
-  row <- min(max(1,row),nR); col <- min(max(1,col),nC)
+                    print(head(largeMat,rows+1)); return(NULL) }
+  rows <- min(max(1,rows),nR); cols <- min(max(1,cols),nC)
   cN <- colnames(largeMat); rN <- rownames(largeMat)
   if(is.null(cN)) { cN <- paste(1:ncol(largeMat)); clab <- "col#" }
   if(is.null(rN)) { rN <- paste(1:nrow(largeMat)); rlab <- "row#"; rownums=F }
   rD <- spc(min(2,max(nchar(paste(nR)))),".")
-  rnD <- spc(min(4,max(nchar(rN[c(1:row,nR)]))),".")
-  linez <- vector("list",row+3) #row,col =number of rows,cols to print
+  rnD <- spc(min(4,max(nchar(rN[c(1:rows,nR)]))),".")
+  linez <- vector("list",rows+3) #row,col =number of rows,cols to print
   rown <- max(nchar(paste(nR)),nchar(rL))*as.numeric(rownums)
-  hdr <- (nchar(cN[c(1:col,nC)]))
+  hdr <- (nchar(cN[c(1:cols,nC)]))
   if(is.numeric(largeMat[1,])) {
     ## assess what the largest numbers are likely to be to adjust header spacing if necessary
     long.nums <- max(max(abs(largeMat[1,]),na.rm=T),max(abs(largeMat[,1]),na.rm=T))
     max.before.dp <- nchar(round(long.nums))+3
   } else { max.before.dp <- 6 }
   hdr[hdr<7] <- 7; hdr[hdr<(digits+max.before.dp)] <- (digits+max.before.dp)
-  idln <- max(nchar(rlab),nchar(rN[c(1:row,nR)]))
+  idln <- max(nchar(rlab),nchar(rN[c(1:rows,nR)]))
   pad <- function(X,L) { if(is.character(X)) { paste(spc(L-nchar(X)),X,sep="") } else { stop(X) } }
   RND <- function(X,...) { if (is.numeric(X)) { round(X,...) } else { X }}
   if(!ret) { cat("\n"); cat(spc(rown),spc(idln),clab,"\n") }
   dotz <- "  ...  "; dotzh <- " ..... "; dotzn <- "..."
   # make adjustments if matrix is small enough to display all rows/cols
-  if(nC<=col) { dotz <- dotzh <- "" ; col <- col-1 }
-  if(nR<=row) { lstln <- 1 } else {  lstln <- 3 }
+  if(nC<=cols) { dotz <- dotzh <- "" ; cols <- cols-1 }
+  if(nR<=rows) { lstln <- 1 } else {  lstln <- 3 }
   ## make adjustments if not displaying rownumbers
   if(!rownums) {
-    lstR <- "" ; rD <- ""; jstr <- rep("",times=row); rL=""
+    lstR <- "" ; rD <- ""; jstr <- rep("",times=rows); rL=""
   } else {
-    lstR <- nR; jstr <- paste(1:row)
+    lstR <- nR; jstr <- paste(1:rows)
   }
-  linez[[1]] <- c(pad(rL,rown),pad(rlab,idln),pad(cN[c(1:col)],hdr[1:col]),
+  linez[[1]] <- c(pad(rL,rown),pad(rlab,idln),pad(cN[c(1:cols)],hdr[1:cols]),
                   dotzh,pad(cN[nC],tail(hdr,1)))
-  for (j in 1:row) { 
-    catdb(j,col)
+  for (j in 1:rows) { 
+    catdb(j,cols)
     linez[[j+1]] <- c(pad(jstr[j],rown),pad(rN[j],idln),
-                      pad(RND(largeMat[j,1:col],digits),hdr[1:col]),dotz,
+                      pad(RND(largeMat[j,1:cols],digits),hdr[1:cols]),dotz,
                       pad(RND(largeMat[j,nC],digits),tail(hdr,1)))
   }
-  linez[[row+2]] <- c(pad(rD,rown),pad(rnD,idln),pad(rep(dotzn,times=col),
-                                                     hdr[1:col]),dotz,pad(dotzn,tail(hdr,1)))
-  linez[[row+3]] <- c(pad(lstR,rown),pad(rN[nR],idln),
-                      pad(RND(largeMat[nR,1:col],digits),hdr[1:col]),
+  linez[[rows+2]] <- c(pad(rD,rown),pad(rnD,idln),pad(rep(dotzn,times=cols),
+                                                     hdr[1:cols]),dotz,pad(dotzn,tail(hdr,1)))
+  linez[[rows+3]] <- c(pad(lstR,rown),pad(rN[nR],idln),
+                      pad(RND(largeMat[nR,1:cols],digits),hdr[1:cols]),
                       dotz,pad(RND(largeMat[nR,nC],digits),tail(hdr,1)))
   if(!ret) {
-    for (j in 1:(row+lstln)) {
+    for (j in 1:(rows+lstln)) {
       cat(paste(linez[[j]],collapse=" "),"\n")
     }
   } else {
