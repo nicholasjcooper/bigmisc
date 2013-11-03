@@ -2,8 +2,8 @@
 #' Tidy display function for matrix objects
 #'
 #' This function prints the first and last columns and rows of a matrix, and
-#' a few more than this if desired. Allows previewing of a matrix without 
-#' overloading the console. Mainly useful when data has row and column names.
+#' more, if desired. Allows previewing of a matrix without 
+#' overloading the console. Most useful when data has row and column names.
 #'
 #' @param largeMat a matrix
 #' @param row number of rows to display

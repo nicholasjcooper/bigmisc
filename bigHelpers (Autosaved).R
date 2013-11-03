@@ -2,7 +2,6 @@ require(reader)
 require(NCmisc)
 require(bigmemory)
 require(biganalytics)
-require(multicore)
 #' Tidier display function for big matrix objects
 #'
 #' This function prints the first and last columns and rows of a big matrix, and
@@ -305,6 +304,7 @@ pca.scree.plot <- function(eigenv,elbow=NA,printvar=T,min.dim=NA,M=NULL,add.fit.
 #' mat <- sim.cor(50)
 #' result <- princomp(mat)
 #' quick.elbow(result$sdev^2)
+#' pca.scree.plot()
 #' # random (largely independent) data, usually higher elbow #
 #' mat2 <- generate.test.matrix(5,3)
 #' result2 <- princomp(mat2)
@@ -2487,44 +2487,8 @@ big.PCA <- function(bigMat,dir=getwd(),pcs.to.keep=50,thin=F,SVD=T,LAP=F,center=
 #                                      samples) and 0.7 is a user-tunable XHMM parameter. 
 
 ### HERE!!!
-#' Correct a big.matrix by principle components
-#' 
-#' Principle components (PC) can be used as a way of capturing bias (when common variance represents bias)
-#' and so PC correction is a way to remove such bias from a dataset. Using the first 'n' PCs from an 
-#' an analysis performed using big.pca(), this function will transform the original matrix by regressing
-#' onto the 'n' principle components (and optionally gender) and returing the residuals. The result
-#' is returned as a big.matrix object, so that objects larger than available RAM can be processed, and
-#' multiple processors can be utilised for greater speed for large datasets.
-#' 
-#' @param pca.result result returned by 'big.pca()', or a list with 2 elements containing
-#'  the principle components and the eigenvalues respectively (or SVD equivalents). Alternatively,
-#'  can be the name of an R binary file containing such an object.
-#' @param bigMat a big.matrix with exactly corresponding samples (columns) to those submitted to PCA prior to correction
-#' @param dir directory containing the big.matrix backing file
-#' @param num.pcs number of principle components (or SVD components) to correct for
-#' @param n.cores number of cores to use in parallel for processing
-#' @param pref prefix to add to the file name of the resulting corrected matrix backing file
-#' @param big.cor.fn instead of using 'pref' directly specify the desired file name
-#' @param write whether to write the result to a file.backed big.matrix or to simply
-#'  return a pointer to the resulting corrected big.matrix
-#' @param sample.info if using 'correct.sex=TRUE' then this object should be
-#'  a dataframe containing the sex of each sample, with sample names as rownames
-#' @param correct.sex if sample.info is a dataframe containing a column named 'gender' or 'sex'
-#'  (case insensitive), then add a sex covariate to the PC correction linear model
-#' @param add.int whether to maintain the pre-corrected means of each variable, i.e, post-correction
-#'  add the mean back onto the residuals which will have mean zero for each variable.
-#' @export
-#' @seealso big.pca
-#' @author Nicholas Cooper 
-#' @examples
-#' mat2 <- sim.cor(500,200,genr=function(n){ (runif(n)/2+.5) })
-#' bmat2 <- as.big.matrix(mat2)
-# calculate PCA on decreasing subset size 
-#' result2 <- big.PCA(bmat2)
-#' corrected <- LRR.PCA.correct(result2,bmat2)
-#' corrected2 <- LRR.PCA.correct(result2,bmat2,n.cores=2)
-#' all.equal(corrected,corrected2)
-LRR.PCA.correct <- function(pca.result,bigMat,dir=getwd(),num.pcs=9,n.cores=1,pref="corrected",
+
+LRR.PCA.correct <- function(pca.result,bigMat,dir,num.pcs=9,n.cores=1,pref="corrected",
                             big.cor.fn=NULL,write=F,sample.info=NULL,correct.sex=F,add.int=F)
 {
   ## using results of a PCA analysis, run correction for 'num.pcs' PCs on a dataset
@@ -2539,7 +2503,7 @@ LRR.PCA.correct <- function(pca.result,bigMat,dir=getwd(),num.pcs=9,n.cores=1,pr
   }
   origMat <- getBigMat(bigMat,dir)
   cat("\nRunning Principle Components correction (PC-correction), using LRR-dataset:\n")
-  print.big.matrix(origMat,name="origMat")
+  bigMatSummary(origMat,name="origMat")
   if(n.cores>1) { multi <- T } else { multi <- F }
   # get filenames now to add to result later
   rN <- rownames(origMat); cN <- colnames(origMat)
@@ -2551,9 +2515,7 @@ LRR.PCA.correct <- function(pca.result,bigMat,dir=getwd(),num.pcs=9,n.cores=1,pr
       {
         pca.file <- get(load(ofn))
         cat(" loaded PCA values and vectors\n")
-        nn <- which(toupper(names(pca.result))=="PCS")
-        if(length(nn)==0) { nn <- 1 }
-        PCs <- pca.result[[nn]]
+        PCs <- pca.file$PCs
       } else {
         stop("Error: file",ofn,"does not exist\n")
       }
@@ -2567,9 +2529,7 @@ LRR.PCA.correct <- function(pca.result,bigMat,dir=getwd(),num.pcs=9,n.cores=1,pr
       }
     } 
   } else {
-    nn <- which(toupper(names(pca.result))=="PCS")
-    if(length(nn)==0) { nn <- 1 }
-    PCs <- pca.result[[nn]]
+    PCs <- pca.result$PCs
   }
   # create new matrix same size, ready for corrected values
   nR <- nrow(origMat); nC <- ncol(origMat)
@@ -2650,7 +2610,7 @@ LRR.PCA.correct <- function(pca.result,bigMat,dir=getwd(),num.pcs=9,n.cores=1,pr
   cat(paste(" LRR PC-Correction took",round((ll-jj)[3]/3600,3),"hours\n"))
   flush(pcCorMat) # should allow names to take  
   cat("\nPC-corrected dataset produced:\n")
-  print.big.matrix(pcCorMat,name="pcCorMat")
+  bigMatSummary(pcCorMat,name="pcCorMat")
   
   mat.ref <- describe(pcCorMat)
   if(write) {
@@ -2710,7 +2670,7 @@ LRR.PCA.correct <- function(pca.result,bigMat,dir=getwd(),num.pcs=9,n.cores=1,pr
 t.big <- function(bigMat,dir=NULL,name="t.bigMat",R.descr=NULL,max.gb=NA,
                   verbose=F,prog=NA,file.ok=T) {
   #this can be slow!
-  if(is.null(R.descr)) { R.descr <- cat.path(dirname(name),name,ext="RData") }
+  if(is.null(R.descr)) { R.descr <- cat.path(basename(name),name,ext="RData") }
   if(!is.big.matrix(bigMat)) {
     if(is.matrix(bigMat) | is.data.frame(bigMat)) {
       warning("just a regular matrix, used t()") ; return(t(bigMat)) 
