@@ -50,6 +50,7 @@ print.large <- function(largeMat,row=3,col=2,digits=4,rL="Row#",rlab="rownames",
   hdr[hdr<7] <- 7; hdr[hdr<(digits+max.before.dp)] <- (digits+max.before.dp)
   idln <- max(nchar(rlab),nchar(rN[c(1:row,nR)]))
   pad <- function(X,L) { if(is.character(X)) { paste(spc(L-nchar(X)),X,sep="") } else { stop(X) } }
+  RND <- function(X,...) { if (is.numeric(X)) { round(X,...) } else { X }}
   if(!ret) { cat("\n"); cat(spc(rown),spc(idln),clab,"\n") }
   dotz <- "  ...  "; dotzh <- " ..... "; dotzn <- "..."
   # make adjustments if matrix is small enough to display all rows/cols
@@ -65,14 +66,14 @@ print.large <- function(largeMat,row=3,col=2,digits=4,rL="Row#",rlab="rownames",
                   dotzh,pad(cN[nC],tail(hdr,1)))
   for (j in 1:row) { 
     linez[[j+1]] <- c(pad(jstr[j],rown),pad(rN[j],idln),
-                      pad(round(largeMat[j,1:col],digits),hdr[1:col]),dotz,
-                      pad(round(largeMat[j,nC],digits),tail(hdr,1)))
+                      pad(RND(largeMat[j,1:col],digits),hdr[1:col]),dotz,
+                      pad(RND(largeMat[j,nC],digits),tail(hdr,1)))
   }
   linez[[row+2]] <- c(pad(rD,rown),pad(rnD,idln),pad(rep(dotzn,times=col),
                                                      hdr[1:col]),dotz,pad(dotzn,tail(hdr,1)))
   linez[[row+3]] <- c(pad(lstR,rown),pad(rN[nR],idln),
-                      pad(round(largeMat[nR,1:col],digits),hdr[1:col]),
-                      dotz,pad(round(largeMat[nR,nC],digits),tail(hdr,1)))
+                      pad(RND(largeMat[nR,1:col],digits),hdr[1:col]),
+                      dotz,pad(RND(largeMat[nR,nC],digits),tail(hdr,1)))
   if(!ret) {
     for (j in 1:(row+lstln)) {
       cat(paste(linez[[j]],collapse=" "),"\n")
