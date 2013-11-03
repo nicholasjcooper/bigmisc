@@ -67,6 +67,11 @@ print.large <- function(largeMat,rows=3,cols=2,digits=4,rL="Row#",rlab="rownames
                   dotzh,pad(cN[nC],tail(hdr,1)))
   for (j in 1:rows) { 
     catdb(j,cols)
+    xy <- pad(RND(largeMat[j,1:cols],digits),hdr[1:cols])
+    xy2 <- RND(largeMat[j,1:cols],digits)
+    xy3 <- hdr[1:cols]
+    xy4 <- largeMat[j,1:cols]
+    catdb(xy,xy2,xy3,xy4)
     linez[[j+1]] <- c(pad(jstr[j],rown),pad(rN[j],idln),
                       pad(RND(largeMat[j,1:cols],digits),hdr[1:cols]),dotz,
                       pad(RND(largeMat[j,nC],digits),tail(hdr,1)))
@@ -221,7 +226,7 @@ cat.db <- function(varlist,labels=NULL,counts=NULL) {
     }
     ## display appropriately according to datatype ##
     typ <- is(val)[1]
-    if(typ=="function") {
+    if(is.function(val)) {
       cat(label,": function",sep=""); return(invisible())
     }
     if(packages.loaded("bigmemory")) {
