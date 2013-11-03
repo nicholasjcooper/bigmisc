@@ -49,7 +49,7 @@ print.large <- function(largeMat,row=3,col=2,digits=4,rL="Row#",rlab="rownames",
   } else { max.before.dp <- 6 }
   hdr[hdr<7] <- 7; hdr[hdr<(digits+max.before.dp)] <- (digits+max.before.dp)
   idln <- max(nchar(rlab),nchar(rN[c(1:row,nR)]))
-  pad <- function(X,L) { paste(spc(L-nchar(X)),X,sep="") }
+  pad <- function(X,L) { if(is.character(X)) { paste(spc(L-nchar(X)),X,sep="") } else { stop(X) } }
   if(!ret) { cat("\n"); cat(spc(rown),spc(idln),clab,"\n") }
   dotz <- "  ...  "; dotzh <- " ..... "; dotzn <- "..."
   # make adjustments if matrix is small enough to display all rows/cols
