@@ -50,7 +50,7 @@ print.large <- function(largeMat,rows=3,cols=2,digits=4,rL="Row#",rlab="rownames
   } else { max.before.dp <- 6 }
   hdr[hdr<7] <- 7; hdr[hdr<(digits+max.before.dp)] <- (digits+max.before.dp)
   idln <- max(nchar(rlab),nchar(rN[c(1:rows,nR)]))
-  pad <- function(X,L) { if(is.character(X)) { paste(spc(L-nchar(X)),X,sep="") } else { stop(X) } }
+  pad <- function(X,L) { X<-paste(X); if(is.character(X)) { paste(spc(L-nchar(X)),X,sep="") } else { stop(X) } }
   RND <- function(X,...) { if (is.numeric(X)) { round(X,...) } else { X }}
   if(!ret) { cat("\n"); cat(spc(rown),spc(idln),clab,"\n") }
   dotz <- "  ...  "; dotzh <- " ..... "; dotzn <- "..."
