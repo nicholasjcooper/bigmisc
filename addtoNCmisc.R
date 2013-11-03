@@ -68,9 +68,10 @@ print.large <- function(largeMat,rows=3,cols=2,digits=4,rL="Row#",rlab="rownames
   for (j in 1:rows) { 
     catdb(j,cols)
     xy2 <- RND(largeMat[j,1:cols],digits)
+    xy <- hdr
     xy3 <- hdr[1:cols]
     xy4 <- largeMat[j,1:cols]
-    catdb(xy2,xy3,xy4)
+    catdb(xy,xy2,xy3,xy4)
     linez[[j+1]] <- c(pad(jstr[j],rown),pad(rN[j],idln),
                       pad(RND(largeMat[j,1:cols],digits),hdr[1:cols]),dotz,
                       pad(RND(largeMat[j,nC],digits),tail(hdr,1)))
