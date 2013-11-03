@@ -1,3 +1,4 @@
+require(tools)
 
 #' Tidy display function for matrix objects
 #'
@@ -86,10 +87,33 @@ print.large <- function(largeMat,row=3,col=2,digits=4,rL="Row#",rlab="rownames",
 
 
 
-
-### add to NCmisc
-## equivalent to base:::substitute but can do any length of arguments
-# won't work if variable is NULL
+#' Convert objects as arguments to object names
+#' 
+#' Equivalent to the base function substitute() but can do any length of arguments instead
+#' of just one. Converts the objects in parentheses into text arguments as if they
+#' had been entered with double quote strings. The objects must exist and be accessible in
+#' the environment the function is called from for the function to work (same as for substitute()).
+#' One application for this is to be able to create functions where object arguments can be
+#' entered without quotation marks (simpler), or where you want to use the name of the object
+#' as well as the data in the object.
+#'
+#' @param x compulsory, simply the first object in the list, no difference to any further objects
+#' @param ... any further objects to return string names for.
+#' @export
+#' @seealso catdb, cat.db
+#' @author Nicholas Cooper 
+#' @examples
+#' myvar <- list(test=c(1,2,3)); var2 <- "testme"; var3 <- 10:14
+#' print(myvar)
+#' # single variable case, equivalent to base::substitute()
+#' print(substitute(myvar))
+#' print(Substitute(myvar))
+#' # multi variable case, substitute won't work
+#' Substitute(myvar,var2,var3)
+#' # catdb() is a wrapper for cat.db() allowing arguments without parentheses
+#' # which is achieved internally by passing the arguments to Substitute()
+#' cat.db(c("myvar","var2","var3"))
+#' catdb(myvar,var2,var3)
 Substitute <- function(x=NULL,...) {
   varlist <- list(...); out <- character(1)
   if(length(varlist)>0) { 
@@ -102,10 +126,10 @@ Substitute <- function(x=NULL,...) {
   return(out[out!=""])
 }
 
-
+# shared documentation with cat.db
 ## same as cat.db but no labels command, and input is without quotes
-#' and must be plain variable names of existing variables (no indices, args, etc)
-#' can be used inside functions and interactively
+# and must be plain variable names of existing variables (no indices, args, etc)
+# can be used inside functions and interactively
 catdb <- function(...,counts=NULL) {
   varlist <- Substitute(...)
   return(cat.db(varlist,labels=NULL,counts=counts))
@@ -113,10 +137,18 @@ catdb <- function(...,counts=NULL) {
 
 #' Output variable states within functions during testing/debugging
 #'
-#' # to put into NCmisc
+#' A versatile function to compactly display most common R objects. Will
+#' return the object name, type, dimension, and a compact representation of
+#' object contents, for instance using print.large() to display matrices,
+#' so as to not overload the console for large objects. Useful for debugging,
+#' can be placed inside loops and functions to track values, dimensions, and data types.
+#' Particularly when debugging complex code, the automatic display of the variable name
+#' prevents confusion versus using regular print statements.
 #' By listing variables to track as character(), provides 'cat()' output 
 #' of compact and informative variable state information, e.g, variable name, value,
 #' datatype and dimension. Can also specify array or list elements, or custom labels.
+#' catdb() is the same as cat.db() except it can take objects without using double quotes
+#' and has no 'labels' command (and doesn't need one).
 #' @param varlist character vector, the list of variable(s) to report, which will trigger
 #'  automatic labelling of the variable name, otherwise if entered as the variable value (ie.
 #'  without quotes, then will by default be displayed as 'unknown variable')
@@ -412,6 +444,25 @@ cor.with <- function(x,r=.5,preserve=F,mn=NA,st=NA) {
 }
 
 
+#' Summarise the dimensions and type of available R example datasets
+#' 
+#' This function will parse the current workspace to see what R datasets
+#' are available. Using the toHTML function from the tools package to interpret
+#' the data() call, each dataset is examined in turn for type and dimensionality.
+#' Can also use a filter for dataset types, to only show, for instance, matrix 
+#' datasets. Also you can specify whether to only look for base datasets, or to
+#' search for datasets in all available packages. Result is a printout to the
+#' console of the available datasets and their characteristics.
+#'
+#' @param filter logical, whether to filter datasets by 'types'
+#' @param types if filter=TRUE, which data types to include in the result
+#' @param all logical, if all=TRUE, look for datasets in all available packages, else just base
+#' @param ... if all is false, further arguments to the data() function to search datasets
+#' @export
+#' @author Nicholas Cooper 
+#' @examples
+#' summarise.r.datasets()
+#' summarise.r.datasets(filter=T,"matrix")
 ## create a summary of R datasets you could use
 summarise.r.datasets <- function(filter=F,types=c("data.frame","matrix"),all=F,...) { 
   # eg., package = .packages(all.available = TRUE)
@@ -438,6 +489,42 @@ summarise.r.datasets <- function(filter=F,types=c("data.frame","matrix"),all=F,.
 
 
 #for NCmisc
+# internal, whether an object exists (ignoring function types)
+#' Does object exist ignoring functions
+#' 
+#' The exists() function can tell you whether an object exists
+#' at all, or whether an object exists with a certain type, but
+#' it can be useful to know whether an object exists as genuine 
+#' data (and not a function) which can be important when a variable
+#' or object is accidently or intentionally given the same name as
+#' a function. This function usually returns a logical value as to
+#' the existence of the object (ignoring functions) but can also
+#' be set to return the non-function type if the object exists.
+#' @param x the object name to search for
+#' @param ret.type logical, if TRUE then will return the objects' type (if it exists) rather
+#' than TRUE or FALSE. If the object doesn't exist the empty string will be returned as the type.
+#' @export
+#' @author Nicholas Cooper 
+#' @examples
+#' x <- "test"
+#' # the standard exists function, for all modes, correct mode, and other modes:
+#' exists("x")
+#' exists("x",mode="character")
+#' exists("x",mode="numeric")
+#' # standard case for a non-function variable
+#' exists.not.function("x",T)
+#' # compare results for a non-existent variable
+#' exists("aVarNotSeen")
+#' exists.not.function("aVarNotSeen")
+#' # compare results for variable that is a function
+#' exists("mean")
+#' exists.not.function("mean")
+#' # define a variable with same name as a function
+#' mean <- 1.4
+#' # exists.not.function returns the type of the variable ignoring the function of the same name
+#' exists.not.function("mean",TRUE)
+#' exists("mean",mode="function")
+#' exists("mean",mode="numeric")
 exists.not.function <- function(x,ret.type=F) {
   if(!is.character(x)) {
     stop("x should be the name of an object [as character type]")
@@ -456,7 +543,6 @@ exists.not.function <- function(x,ret.type=F) {
 
 #' A more general 'dim()' function
 #'
-#' # to put into NCmisc
 #' A more general 'dim' function. For arrays simply calls the dim() function, but for other data types, tries to
 #' provide an equivalent, for instance will call length(x) for vectors, and will
 #' recursively report dims for lists, and will attempt something sensible for other datatypes.
@@ -487,7 +573,6 @@ Dim <- function(x,cat.lists=T) {
 
 
 
-# to add to NCmisc
 #' Monitor CPU, RAM and Processes
 #' 
 #' This function runs the unix 'top' command and returns the overall CPU and RAM usage,
@@ -673,7 +758,7 @@ suck.bytes <- function(tot1,GB=T) {
 
 
 
-#forNCmisc
+
 #' Check whether a set of packages has been loaded
 #' 
 #' Returns TRUE if the whole set of packages entered has been loaded, or FALSE
