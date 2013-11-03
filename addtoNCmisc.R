@@ -67,13 +67,13 @@ print.large <- function(largeMat,rows=3,cols=2,digits=4,rL="Row#",rlab="rownames
                   dotzh,pad(cN[nC],tail(hdr,1)))
   for (j in 1:rows) { 
     linez[[j+1]] <- c(pad(jstr[j],rown),pad(rN[j],idln),
-                      pad(RND(unlist(largeMat[j,1:cols],digits)),hdr[1:cols]),dotz,
+                      pad(RND(unlist(largeMat[j,1:cols]),digits),hdr[1:cols]),dotz,
                       pad(RND(largeMat[j,nC],digits),tail(hdr,1)))
   }
   linez[[rows+2]] <- c(pad(rD,rown),pad(rnD,idln),pad(rep(dotzn,times=cols),
                                                      hdr[1:cols]),dotz,pad(dotzn,tail(hdr,1)))
   linez[[rows+3]] <- c(pad(lstR,rown),pad(rN[nR],idln),
-                      pad(RND(largeMat[nR,1:cols],digits),hdr[1:cols]),
+                      pad(RND(unlist(largeMat[nR,1:cols]),digits),hdr[1:cols]),
                       dotz,pad(RND(largeMat[nR,nC],digits),tail(hdr,1)))
   if(!ret) {
     for (j in 1:(rows+lstln)) {
