@@ -29,7 +29,7 @@ print.large <- function(largeMat,rows=3,cols=2,digits=4,rL="Row#",rlab="rownames
   # can return result as lines of text instead of printing to screen (for printing to file)
   # allows customization of row and column labels
   # only worth using with data that has row/col names
-  
+  if(!is.data.frame(largeMat) & !is.matrix(largeMat) & !is.big.matrix(largeMat)) { warning("unrecognised object type, using 'head'"); return(head(largeMat)) }
   if(length(dim(largeMat))!=2) { stop("expected largeMat to have 2 dimensions") }
   nC <- ncol(largeMat); nR <- nrow(largeMat); 
   if(nC<2 | nR<3) { warning("print.large only works for matrices with dims >= c(3,2), passed to print(head())")
@@ -403,6 +403,8 @@ sim.cor <- function(nrow=100,ncol=100,genx=rnorm,genr=runif,k=3,mix.order=T) {
   }
   return(new.mat)
 }
+
+
 
 #' Simulate a correlated variable
 #'
