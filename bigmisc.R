@@ -17,6 +17,8 @@
 #' @param col integer, number of columns to display
 #' @param rcap character, caption to display for the rows
 #' @param ccap character, caption to display for the columns
+#' @return prints to console a compact representation of the bigMat matrix, 
+#'  with the first few rows and columns, and the last row and column
 #' @seealso get.big.matrix()
 #' @export
 #' @examples
@@ -299,6 +301,7 @@ pca.scree.plot <- function(eigenv,elbow=NA,printvar=TRUE,min.dim=NA,M=NULL,add.f
 #' @param low numeric, between zero and one, the threshold to define that a principle component
 #'  does not explain much 'of the variance'.
 #' @param max.pc maximum percentage of the variance to capture before the elbow (cumulative sum to PC 'n')
+#' @return the number of last principle component to keep, prior to the determined elbow cutoff
 #' @export
 #' @seealso estimate.eig.vpcs
 #' @author Nicholas Cooper 
@@ -396,6 +399,8 @@ quick.elbow <- function(varpc,low=.04,max.pc=.9) {
 #'  the list of results from parallel calls on submatrices of bigMat, usually of size by*X.
 #' @param ... if use.apply=TRUE, then additional arguments for apply(); else additional arguments
 #'  for FUN.
+#' @return result depends on the function called and combine.fn, but if MARGIN=1 probably a vector 
+#'  of length nrow(bigMat), or if MARGIN=2 a vector of length ncol(bigMat).
 #' @export
 #' @examples
 #' library(bigmemory); library(biganalytics)
@@ -558,6 +563,8 @@ choose.comb.fn <- function(result.list,stepz) {
 #' Returns TRUE if bigalgebra is already installed.
 #' @seealso big.algebra.install.help
 #' @param verbose whether to report on installation progress/steps
+#' @return if SVN is installed on your system, along with BLAS, should install the bigalgebra package,
+#'  else will return instructions on what to do to fix the issue 
 #' @export
 #' @examples
 #' # not run # svn.bigalgebra.install(TRUE)
@@ -629,6 +636,9 @@ svn.bigalgebra.install <- function(verbose=FALSE) {
 #' type big.algebra.install.help().
 #' @seealso svn.bigalgebra.install
 #' @param verbose whether to report on installation progress/steps
+#' @return if bigalgebra is already installed, or can be installed from RForge or SVN,
+#'  this should load or install the bigalgebra package,
+#'  else will return instructions on what to do next to fix the issue 
 #' @export
 #' @examples
 #' # not run # big.algebra.install.help(TRUE)
@@ -636,11 +646,11 @@ big.algebra.install.help <- function(verbose=FALSE) {
   ## bigalgebra package doesn't install easily using the regular R way of installing packages
   # here try a simple way that might work, and if not, provide links and instructions to 
   # guide a manual installation
-  try({ if(require(bigalgebra)) { return(T) } })
+  try({ if(do.call("require",args=list("bigalgebra"))) { return(T) } })
   cat("\nbigalgebra installation not found, will attempt to install now, but it can be tricky\n")
   if("bigalgebra" %in% search.cran("big")[[1]]) { must.use.package("bigalgebra",T) }
   do.call("install.packages",args=list("bigalgebra", repos="http://R-Forge.R-project.org"))
-  if(require(bigalgebra)) {
+  if(do.call("require",args=list("bigalgebra"))) {
     cat("bigalgebra seems to have installed successfully\n")
     return(T)
   } else {
@@ -672,6 +682,7 @@ big.algebra.install.help <- function(verbose=FALSE) {
 #'  big.matrix.descriptor, a big.matrix object or a big.matrix.descriptor object.
 #' @param dir directory containing the backing file (if not the working directory)
 #' @param verbose whether to display information on method being used, or minor warnings
+#' @return returns a big.matrix object, regardless of what method was used as reference/input
 #' @export
 #' @examples
 #' library(bigmemory); 
@@ -902,6 +913,7 @@ check.text.matrix.format <- function(fn,ncol=NA,header=NULL,row.names=NULL,sep="
 #'  the object, will return the filename; overrides data.frame. Alternatively, if big.matrix=TRUE,
 #'  then this provides the basename for a filebacked big.matrix.
 #' @param track.big logical, whether to display a progress bar for large matrices (size>7) where progress will be slow
+#' @return returns a random matrix of data for testing/simulation, can be a data.frame or big.matrix if those options are selected
 #' @export
 #' @author Nicholas Cooper 
 #' @examples
@@ -967,7 +979,7 @@ generate.test.matrix <- function(size=5,row.exp=2,rand=rnorm,dimnames=TRUE,
 #' Load a text file into a big.matrix object
 #'
 #' This provides a faster way to import text data
-#' into a big.matrix object than bigmemory:::read.big.matrix(). The
+#' into a big.matrix object than bigmemory::read.big.matrix(). The
 #' method allows import of a data matrix with size exceeding RAM limits.
 #' Can import from a matrix delimited file with or without row/column names,
 #' or from a long format dataset with no row/columns names (these should be
@@ -1026,6 +1038,8 @@ generate.test.matrix <- function(size=5,row.exp=2,rand=rnorm,dimnames=TRUE,
 #'  disk space to import the object you have specified. By default this is set to 
 #'  1 terabyte, so if importing an object larger than that, you will have to increase
 #'  this parameter to make it work.
+#' @return returns a big.matrix containing the data imported (single big.matrix even
+#'  when text input is split across multiple files)
 #' @export
 #' @examples
 #' # all file names to use in this example #
@@ -1550,6 +1564,7 @@ select.col.row.custom <- function(bigMat,row,col,verbose=T)
 #'  to the binary file containing the big.matrix.descriptor object [either can be read with get.big.matrix() or
 #'  prv.big.matrix()]
 #' @param ... other arguments to be passed to uniform.select, subpc.select, subcor.select, or select.least.assoc
+#' @return a smaller big.matrix with fewer rows and/or columns than the original matrix
 #' @export
 #' @seealso uniform.select, subpc.select, subcor.select, select.least.assoc, big.select, get.big.matrix
 #' @author Nicholas Cooper 
@@ -1637,6 +1652,7 @@ thin <- function(bigMat,keep=0.05,how=c("uniform","correlation","pca","associati
 #' @param pref character, prefix for the big.matrix backingfile and descriptorfile, and optionally
 #'  an R binary file containing a big.matrix.descriptor object pointing to the big.matrix result.
 #' @param verbose whether to display extra information about processing and progress
+#' @return a big.matrix with the selected (in order) rows and columns specified
 #' @export
 #' @author Nicholas Cooper 
 #' @examples
@@ -1771,6 +1787,8 @@ big.select <- function(bigMat, select.rows=NULL, select.cols=NULL, dir=getwd(),
 #'  this memory limit (see estimate.memory() from NCmisc).
 #' @param ... further parameters to pass to big.PCA() which performs the subset PCA used to 
 #'  determine the most representative rows (or columns).
+#' @return a set of row or column indexes (depents on 'rows' parameter) of the most representative
+#'  variables in the matrix, as defined by most correlated to principle components
 #' @export
 #' @seealso thin, uniform.select, big.PCA, get.big.matrix
 #' @author Nicholas Cooper 
@@ -1882,6 +1900,8 @@ subpc.select <- function(bigMat,keep=.05,rows=TRUE,dir=getwd(),random=TRUE,ram.g
 #'  that some very large matrices will not be able to be processed by this function unless 
 #'  this parameter is increased; basically if the dimension being thinned is more than 5% of
 #'  this memory limit (see estimate.memory() from NCmisc).
+#' @return a set of row or column indexes (depents on 'rows' parameter) of the most inter-correlated
+#'  (or least) variables in the matrix.
 #' @export
 #' @seealso thin, uniform.select, get.big.matrix
 #' @author Nicholas Cooper 
@@ -1961,6 +1981,8 @@ subcor.select <- function(bigMat,keep=.05,rows=TRUE,hi.cor=TRUE,dir=getwd(),rand
 #'  that some very large matrices will not be able to be processed by this function unless 
 #'  this parameter is increased; basically if the dimension being thinned is more than 5% of
 #'  this memory limit (see estimate.memory() from NCmisc).
+#' @return a set of row or column indexes (depents on 'rows' parameter) of uniformly distributed
+#'  (optionally reproduceable) or randomly selected variables in the matrix.
 #' @export
 #' @seealso subpc.select
 #' @author Nicholas Cooper 
@@ -2014,6 +2036,8 @@ uniform.select <- function(bigMat,keep=.05,rows=TRUE,dir="",random=TRUE,ram.gb=0
 #' @param use.col the name of the categorical phenotype column in the data.frame 'sample.info'
 #' @param p.values logical, whether to return p.values from the associations, or F-values
 #' @param n.cores integer, if wanting to process the analysis using multiple cores, specify the number
+#' @return depending on options selected returns either a list of F values and p values, or just F, or just p-values
+#'  for association with each variable in the big.matrix.
 #' @export
 #' @seealso get.big.matrix
 #' @author Nicholas Cooper 
@@ -2143,6 +2167,8 @@ quick.pheno.assocs <- function(bigMat,sample.info=NULL,use.col="phenotype",dir="
 #' @param least logical, whether to select TRUE, the top least associated variables, or FALSE, the most 
 #'  associated.
 #' @param n.cores integer, if wanting to process the analysis using multiple cores, specify the number
+#' @return a set of row or column indexes (depents on 'rows' parameter) of the variables most dependent
+#'  (or indepent) variables measured by association with a [continuous/categorical] phenotype.
 #' @export
 #' @seealso quick.pheno.assocs
 #' @author Nicholas Cooper 
@@ -2194,8 +2220,7 @@ cut.fac <- function(N,n.grps,start.zero=FALSE,factor=TRUE) {
 
 
 
-### to wrap ##
-#### HERE !!!
+
 
 #' PCA/Singular Value Decomposition for big.matrix
 #' 
@@ -2235,6 +2260,8 @@ cut.fac <- function(N,n.grps,start.zero=FALSE,factor=TRUE) {
 #' @param pcs.fn name of the binary when save.pcs=TRUE
 #' @param verbose whether to display detailed progress of the PCA
 #' @param ... if thin is TRUE, then these should be any additional arguments for thin(), e.g, 'keep', 'how', etc.
+#' @return a list of principle components/singular vectors (may be incomplete depending on options selected), and of
+#'  the eigenvalues/singular values.
 #' @export
 #' @seealso get.big.matrix, PC.correct
 #' @author Nicholas Cooper
@@ -2412,13 +2439,7 @@ big.PCA <- function(bigMat,dir=getwd(),pcs.to.keep=50,thin=FALSE,SVD=TRUE,LAP=FA
 
 
 
-# XHMM follows the empirical rule of thumb
-# by calculating the relative variance of each component and
-# removing the K components with a value of 0.7 / n or higher,28
-# where n is the number of components (in this case, number of
-#                                      samples) and 0.7 is a user-tunable XHMM parameter. 
 
-### HERE!!!
 #' Correct a big.matrix by principle components
 #' 
 #' Principle components (PC) can be used as a way of capturing bias (when common variance represents bias)
@@ -2445,6 +2466,7 @@ big.PCA <- function(bigMat,dir=getwd(),pcs.to.keep=50,thin=FALSE,SVD=TRUE,LAP=FA
 #'  (case insensitive), then add a sex covariate to the PC correction linear model
 #' @param add.int whether to maintain the pre-corrected means of each variable, i.e, post-correction
 #'  add the mean back onto the residuals which will have mean zero for each variable.
+#' @return big.matrix of the same dimensions as original, corrected for n PCs and an optional covariate (sex)
 #' @export
 #' @seealso big.pca
 #' @author Nicholas Cooper 
@@ -2629,6 +2651,7 @@ PC.correct <- function(pca.result,bigMat,dir=getwd(),num.pcs=9,n.cores=1,pref="c
 #'  in question is larger than 1GB.
 #' @param file.ok whether to accept big.matrix.descriptors or filenames as input for 
 #'  'bigMat'; if T, then anything that works with get.big.matrix(bigMat,dir) is acceptable
+#' @return a big.matrix that is the transpose (rows and columns switched) of the original matrix
 #' @export
 #' @examples
 #' library(bigmemory)
