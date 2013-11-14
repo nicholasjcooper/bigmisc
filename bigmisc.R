@@ -138,7 +138,9 @@ estimate.eig.vpcs <- function(eigenv=NULL,min.dim=length(eigenv),M=NULL,elbow=NA
                               estimated=FALSE,print.est=TRUE,print.coef=FALSE,
                               add.fit.line=FALSE,col="blue",ignore.warn=FALSE) {
   ## if matrix is optionally inputted, calculate the minimum dim automatically
+  if(length(eigenv)<2) { warning("was passed insufficient eigenvalues (",length(eigenv),")") ; return(eigenv) }
   if(!is.null(M)) { if(!is.null(dim(M))) { min.dim <- min(dim(M),na.rm=T) } }
+  if(all(is.na(min.dim))) { min.dim <- length(eigenv) }
   n.comp <- length(eigenv) # max(c(min.dim,length(eigenv)),na.rm=T)
   if(all(is.na(elbow))) { 
     if(n.comp==min.dim) {
@@ -149,8 +151,8 @@ estimate.eig.vpcs <- function(eigenv=NULL,min.dim=length(eigenv),M=NULL,elbow=NA
   }
   elbow <- round(min(n.comp,elbow,na.rm=T)) # make sure not > n.comp
   if(!is.numeric(eigenv)) { warning("eigenv not numeric"); return(NULL) }
-  #prv(c("elbow","min.dim","n.comp","eigenv"))
-  if(is.na(min.dim) | ((min.dim-n.comp)<2) | ((n.comp-elbow)<(min.dim/20)) ) {
+  #preview(c("elbow","min.dim","n.comp","eigenv"))
+  if(is.na(min.dim) | ((min.dim-n.comp)<2) | ((n.comp-elbow)<(min(20,min.dim/20,na.rm=T))) ) {
     # if most/all eigenvalues already present this is not needed, or if parameters insufficient
     # then don't try to calculate the AUC of the remaining eigenvalues
     if(n.comp==min.dim) {
@@ -1482,7 +1484,7 @@ import.big.data <- function(input.fn=NULL, dir=getwd(), long=FALSE, rows.fn=NULL
 row.rep <- function(X) { X[is.na(X)] <- mean(X,na.rm=T); X }
 
 
-#internal, analog from plumbCNV
+#internal, analog of 'select.samp.snp.custom' from older versions of plumbCNV
 select.col.row.custom <- function(bigMat,row,col,verbose=T)
 {
   # based on files/vectors of row-ids and column-ids create selection
